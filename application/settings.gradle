@@ -1,0 +1,30 @@
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        flatDir {
+            dirs 'app/libs'
+        }
+        maven { url 'https://jitpack.io' }
+        maven { url "https://mirrors.tencent.com/repository/maven/thirdparty" }
+    }
+}
+
+include ':app'
+
+include ':debug'
+
+include ':tuicallkit-kt'
+project(':tuicallkit-kt').projectDir = new File(settingsDir, "../call/tuicallkit-kt")
+
+include ':tuilivekit'
+project(':tuilivekit').projectDir = new File(settingsDir, "../live/tuilivekit")
+
+
+include(":atomic")
+project(':atomic').projectDir = new File(settingsDir, "../atomic_x")
+
+if (buildEngineSource.toBoolean()) {
+    apply from: new File(settingsDir, './engine_source_settings.gradle').getAbsolutePath()
+}

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/app_color_white"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:orientation="vertical">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="62dp"
+        android:background="@color/app_color_white">
+
+        <ImageView
+            android:id="@+id/iv_back"
+            android:layout_width="30dp"
+            android:layout_height="38dp"
+            android:layout_centerVertical="true"
+            android:layout_marginStart="12dp"
+            android:gravity="center_vertical"
+            android:padding="10dp"
+            android:src="@drawable/app_back" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerHorizontal="true"
+            android:layout_centerVertical="true"
+            android:text="@string/app_join_group_call"
+            android:textColor="@color/app_color_black"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="40dp"
+        android:layout_marginEnd="16dp">
+
+        <TextView
+            android:id="@+id/tv_join_call"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="call ID"
+            android:textColor="@color/app_color_black"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/et_call_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_marginStart="10dp"
+            android:layout_toEndOf="@+id/tv_join_call"
+            android:background="@null"
+            android:gravity="end"
+            android:hint="@string/app_hint_call_id"
+            android:textColor="@color/app_color_black"
+            android:textColorHint="@color/app_color_input_normal"
+            android:textSize="16sp" />
+    </RelativeLayout>
+
+    <View
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_weight="1" />
+
+    <Button
+        android:id="@+id/btn_call"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="46dp"
+        android:background="@drawable/app_bg_button"
+        android:text="@string/app_join_group_call"
+        android:textAllCaps="false"
+        android:textColor="@color/app_color_white"
+        android:textSize="16sp" />
+</LinearLayout>

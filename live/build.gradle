@@ -1,0 +1,46 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        def gradleMajorVersion = gradle.gradleVersion.tokenize('.')[0].toInteger()
+        if (gradleMajorVersion >= 8) {
+            classpath 'com.android.tools.build:gradle:8.0.2'
+            classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0"
+        } else {
+            classpath 'com.android.tools.build:gradle:4.2.1'
+            classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.6.10"
+        }
+    }
+}
+
+allprojects {
+    repositories {
+        flatDir {
+            dirs project(':app').file('libs')
+        }
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+        maven { url "https://mirrors.tencent.com/repository/maven/thirdparty" }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
+ext {
+    compileSdkVersion = 34
+    buildToolsVersion = "30.0.1"
+    minSdkVersion = 21
+    targetSdkVersion = 34
+    liteavSdk = "com.tencent.liteav:LiteAVSDK_Professional:12.8.0.19279"
+    roomEngineSdk = buildEngineSource.toBoolean() ? project(":engine_source") : "io.trtc.uikit:rtc_room_engine:3.4.0.1306"
+    atomicxCoreSdk = buildAtomicxCoreSource.toBoolean() ? project(":atomicxcore") : "io.trtc.uikit:atomicx-core:3.4.0.1307"
+    imSdk = "com.tencent.imsdk:imsdk-plus:8.7.7201"
+    common = "io.trtc.uikit:common:3.3.0.1194"
+}
