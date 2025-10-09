@@ -1,0 +1,7 @@
+include ':app'
+include ':debug'
+include ':tuicallkit-kt'
+
+// The following configuration is used by the development team of calls uikit for debugging.
+// You can ignore the configuration here.
+// include ':engine_source'
