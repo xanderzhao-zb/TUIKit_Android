@@ -10,11 +10,11 @@ internal object GroupTypeIconMapper {
 
     fun iconResId(groupTypeValue: String): Int {
         return when (groupTypeValue) {
-            "Work" -> R.drawable.ic_contact_list_group_type_work
-            "Public" -> R.drawable.ic_contact_list_group_type_public
-            "Meeting" -> R.drawable.ic_contact_list_group_type_meeting
-            "Community" -> R.drawable.ic_contact_list_group_type_community
-            else -> R.drawable.ic_contact_list_group_type_work
+            "Work" -> R.drawable.contact_list_ic_group_type_work
+            "Public" -> R.drawable.contact_list_ic_group_type_public
+            "Meeting" -> R.drawable.contact_list_ic_group_type_meeting
+            "Community" -> R.drawable.contact_list_ic_group_type_community
+            else -> R.drawable.contact_list_ic_group_type_work
         }
     }
 }

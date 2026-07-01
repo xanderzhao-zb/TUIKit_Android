@@ -160,10 +160,10 @@ internal class ContactListSearchBarView @JvmOverloads constructor(
         }
         inputContainer.background = backgroundDrawable
 
-        searchIcon.setImageResource(R.drawable.ic_contact_list_search)
+        searchIcon.setImageResource(R.drawable.contact_list_ic_search)
         searchIcon.setColorFilter(colors.textColorTertiary)
 
-        clearButton.setImageResource(R.drawable.ic_contact_list_search_clear)
+        clearButton.setImageResource(R.drawable.contact_list_ic_search_clear)
         clearButton.setColorFilter(colors.textColorPrimary)
 
         editText.setTextColor(colors.textColorPrimary)

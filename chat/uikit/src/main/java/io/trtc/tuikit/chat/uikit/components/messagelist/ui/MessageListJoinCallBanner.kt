@@ -27,7 +27,7 @@ import com.tencent.imsdk.v2.V2TIMManager
 import com.tencent.imsdk.v2.V2TIMUserFullInfo
 import com.tencent.imsdk.v2.V2TIMValueCallback
 import io.trtc.tuikit.chat.uikit.R
-import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.AtomicCallEventPublisher
+import io.trtc.tuikit.chat.uikit.components.common.AtomicCallEventPublisher
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore

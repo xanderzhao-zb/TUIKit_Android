@@ -10,12 +10,16 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.lifecycle.ViewModelProvider
 import io.trtc.tuikit.chat.uikit.R
+import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingActionConfig
+import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingActionContext
+import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingActionStyle
+import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingCustomAction
+import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingScene
 import io.trtc.tuikit.chat.uikit.components.chatsetting.utils.findViewModelStoreOwner
 import io.trtc.tuikit.chat.uikit.components.chatsetting.viewmodel.C2CChatSettingViewModel
 import io.trtc.tuikit.chat.uikit.components.chatsetting.viewmodel.C2CChatSettingViewModelFactory
-import io.trtc.tuikit.atomicx.common.util.PublishParams
 import io.trtc.tuikit.atomicx.common.util.ScreenUtil.dp2px
-import io.trtc.tuikit.atomicx.common.util.TUIEventBus
+import io.trtc.tuikit.chat.uikit.components.common.AtomicCallEventPublisher
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicx.widget.basicwidget.alertdialog.AtomicAlertDialog
@@ -247,8 +251,42 @@ class C2CChatSettingView @JvmOverloads constructor(
             }
         }
 
+        appendCustomActions(contentLayout, actionRows.isNotEmpty())
+
         scrollView.addView(contentLayout)
         addView(scrollView)
+    }
+
+    private fun appendCustomActions(parent: LinearLayout, hasPrecedingActions: Boolean) {
+        val provider = ChatSettingActionConfig.customActionProvider ?: return
+        val actions = provider.getActions(
+            ChatSettingActionContext(
+                context = context,
+                scene = ChatSettingScene.C2C,
+                userID = currentUserID,
+                groupID = null
+            )
+        )
+        actions.forEachIndexed { index, action ->
+            if (hasPrecedingActions || index > 0) {
+                addDivider(parent)
+            }
+            parent.addView(createCustomActionRow(action))
+        }
+    }
+
+    private fun createCustomActionRow(action: ChatSettingCustomAction): SettingRowButton {
+        return SettingRowButton(context).apply {
+            setTitle(action.title)
+            setButtonStyle(
+                when (action.style) {
+                    ChatSettingActionStyle.LINK -> SettingRowButton.Style.LINK
+                    ChatSettingActionStyle.DANGER -> SettingRowButton.Style.DANGER
+                    ChatSettingActionStyle.NORMAL -> SettingRowButton.Style.NORMAL
+                }
+            )
+            setOnClickListener { action.onClick(context) }
+        }
     }
 
     private fun createSendMessageButton(): SettingRowButton {
@@ -266,7 +304,7 @@ class C2CChatSettingView @JvmOverloads constructor(
             setOnClickListener {
                 onVoiceCallClick?.invoke() ?: currentUserID?.let { userID ->
                     AtomicCallEventPublisher.publishStartCall(
-                        userID = userID,
+                        participantIds = listOf(userID),
                         mediaType = AtomicCallEventPublisher.MEDIA_TYPE_AUDIO
                     )
                 }
@@ -281,7 +319,7 @@ class C2CChatSettingView @JvmOverloads constructor(
             setOnClickListener {
                 onVideoCallClick?.invoke() ?: currentUserID?.let { userID ->
                     AtomicCallEventPublisher.publishStartCall(
-                        userID = userID,
+                        participantIds = listOf(userID),
                         mediaType = AtomicCallEventPublisher.MEDIA_TYPE_VIDEO
                     )
                 }
@@ -462,34 +500,5 @@ class C2CChatSettingView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         cleanupBinding()
-    }
-}
-
-internal object AtomicCallEventPublisher {
-    const val MEDIA_TYPE_AUDIO = "audio"
-    const val MEDIA_TYPE_VIDEO = "video"
-
-    private const val EVENT_START_CALL = "call.startCall"
-    private const val KEY_PARTICIPANT_IDS = "participantIds"
-    private const val KEY_MEDIA_TYPE = "mediaType"
-    private const val KEY_TIMEOUT = "timeout"
-    private const val DEFAULT_TIMEOUT_SECONDS = 30
-
-    fun publishStartCall(userID: String, mediaType: String) {
-        if (userID.isEmpty()) {
-            return
-        }
-        TUIEventBus.shared.publish(
-            EVENT_START_CALL,
-            null,
-            PublishParams(
-                isSticky = false,
-                data = mapOf(
-                    KEY_PARTICIPANT_IDS to listOf(userID),
-                    KEY_MEDIA_TYPE to mediaType,
-                    KEY_TIMEOUT to DEFAULT_TIMEOUT_SECONDS
-                )
-            )
-        )
     }
 }

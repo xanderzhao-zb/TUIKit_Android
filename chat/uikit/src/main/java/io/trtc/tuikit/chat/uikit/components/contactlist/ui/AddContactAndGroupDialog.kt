@@ -333,7 +333,7 @@ internal class AddContactAndGroupDialog(
         inputContainer.addView(searchInput)
 
         val searchIcon = ImageView(context).apply {
-            setImageResource(R.drawable.ic_contact_list_search)
+            setImageResource(R.drawable.contact_list_ic_search)
             setColorFilter(colors.textColorTertiary)
             val iconSize = dp2px(15f, dm).toInt()
             layoutParams = FrameLayout.LayoutParams(
@@ -346,7 +346,7 @@ internal class AddContactAndGroupDialog(
         inputContainer.addView(searchIcon)
 
         val clearButton = ImageView(context).apply {
-            setImageResource(R.drawable.ic_contact_list_search_clear)
+            setImageResource(R.drawable.contact_list_ic_search_clear)
             setColorFilter(colors.textColorPrimary)
             val iconSize = dp2px(16f, dm).toInt()
             layoutParams = FrameLayout.LayoutParams(

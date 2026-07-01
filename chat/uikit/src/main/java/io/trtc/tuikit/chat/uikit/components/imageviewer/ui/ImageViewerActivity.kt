@@ -1,6 +1,4 @@
 package io.trtc.tuikit.chat.uikit.components.imageviewer.ui
-import android.Manifest
-import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -18,8 +16,6 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -30,7 +26,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
+import io.trtc.tuikit.atomicx.common.permission.PermissionCallback
 import io.trtc.tuikit.chat.uikit.R
+import io.trtc.tuikit.chat.uikit.components.common.ChatPermissionHelper
 import io.trtc.tuikit.chat.uikit.components.common.expandTouchTarget
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageElement
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewer
@@ -70,7 +68,6 @@ class ImageViewerActivity : AppCompatActivity() {
     private var hasAppliedInitialPage = false
     private var session: ImageViewer.Session? = null
     private var activeForCallbacks = true
-    private var pendingSaveAfterPermission: ImageElement? = null
     private var shouldResumeInlineVideoPlayback = false
     private var currentSafeAreaInsets = ImageViewerSafeAreaInsets()
     private val boundaryLoadState = ImageViewerBoundaryLoadState()
@@ -179,24 +176,6 @@ class ImageViewerActivity : AppCompatActivity() {
             }
         }
         super.onDestroy()
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != REQUEST_WRITE_EXTERNAL_STORAGE) {
-            return
-        }
-        val pendingElement = pendingSaveAfterPermission
-        pendingSaveAfterPermission = null
-        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && pendingElement != null) {
-            startSaveMedia(pendingElement)
-        } else {
-            showToast(getString(R.string.image_viewer_save_failed))
-        }
     }
 
     private fun bindViews() {
@@ -548,18 +527,17 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun requestStoragePermissionIfNeeded(element: ImageElement) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
-            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            startSaveMedia(element)
-            return
-        }
-        pendingSaveAfterPermission = element
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-            REQUEST_WRITE_EXTERNAL_STORAGE
+        ChatPermissionHelper.requestPermission(
+            ChatPermissionHelper.PERMISSION_STORAGE,
+            object : PermissionCallback() {
+                override fun onGranted() {
+                    startSaveMedia(element)
+                }
+
+                override fun onDenied() {
+                    showToast(getString(R.string.image_viewer_save_failed))
+                }
+            }
         )
     }
 
@@ -817,7 +795,6 @@ class ImageViewerActivity : AppCompatActivity() {
         private const val LOAD_MORE_CALLBACK_SETTLE_MS = 100L
         private const val LOAD_MORE_TIMEOUT_MS = 15000L
         private const val TOAST_DURATION_MS = 2000L
-        private const val REQUEST_WRITE_EXTERNAL_STORAGE = 1001
         private const val MEDIA_TYPE_VIDEO = 1
         private const val SAVE_BUTTON_SIZE_DP = 25
         private const val SAVE_BUTTON_BASE_END_MARGIN_DP = 16

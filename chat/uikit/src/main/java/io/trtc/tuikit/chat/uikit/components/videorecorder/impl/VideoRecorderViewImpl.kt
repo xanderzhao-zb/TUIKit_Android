@@ -9,8 +9,8 @@ import io.trtc.tuikit.chat.uikit.components.videorecorder.RecordMode
 import io.trtc.tuikit.chat.uikit.components.videorecorder.VideoRecorderConfig
 import io.trtc.tuikit.chat.uikit.components.videorecorder.config.VideoRecorderConfigInternal
 import io.trtc.tuikit.chat.uikit.components.videorecorder.core.VideoRecorderSignatureChecker
-import io.trtc.tuikit.chat.uikit.components.videorecorder.utils.VideoRecorderPermissionHelper
-import io.trtc.tuikit.chat.uikit.components.videorecorder.utils.VideoRecorderPermissionHelper.PermissionCallback
+import io.trtc.tuikit.atomicx.common.permission.PermissionCallback
+import io.trtc.tuikit.chat.uikit.components.common.ChatPermissionHelper
 import io.trtc.tuikit.chat.uikit.components.videorecorder.view.VideoRecorderBridgeActivity
 
 class VideoRecorderViewImpl {
@@ -30,7 +30,7 @@ class VideoRecorderViewImpl {
         }
 
         val isPhotoOnly = config?.recordMode == RecordMode.PHOTO_ONLY
-        videoRecodePermissionRequest(isPhotoOnly, object : PermissionCallback {
+        videoRecodePermissionRequest(isPhotoOnly, object : PermissionCallback() {
             override fun onGranted() {
                 VideoRecorderConfigInternal.getInstance().setConfig(config)
                 VideoRecorderConfigInternal.getInstance().setThemeColor(AppBuilderConfig.primaryColor)
@@ -60,9 +60,9 @@ class VideoRecorderViewImpl {
         isOnlyPhoto: Boolean,
         callback: PermissionCallback
     ) {
-        VideoRecorderPermissionHelper.requestPermission(
-            VideoRecorderPermissionHelper.PERMISSION_CAMERA,
-            object : PermissionCallback {
+        ChatPermissionHelper.requestPermission(
+            ChatPermissionHelper.PERMISSION_CAMERA,
+            object : PermissionCallback() {
                 override fun onGranted() {
                     if (isOnlyPhoto) {
                         callback.onGranted()
@@ -80,9 +80,9 @@ class VideoRecorderViewImpl {
     }
 
     private fun microphonePermissionRequest(callback: PermissionCallback) {
-        VideoRecorderPermissionHelper.requestPermission(
-            VideoRecorderPermissionHelper.PERMISSION_MICROPHONE,
-            object : PermissionCallback {
+        ChatPermissionHelper.requestPermission(
+            ChatPermissionHelper.PERMISSION_MICROPHONE,
+            object : PermissionCallback() {
                 override fun onGranted() {
                     callback.onGranted()
                 }

@@ -18,6 +18,10 @@ import io.trtc.tuikit.atomicx.albumpicker.AlbumPickerMediaFilter
 import io.trtc.tuikit.atomicx.albumpicker.AlbumPickerStyle
 import io.trtc.tuikit.atomicx.albumpicker.AlbumPickerTheme
 import io.trtc.tuikit.chat.uikit.components.messageinput.utils.MessageInputAlbumPickerActivity
+import io.trtc.tuikit.chat.uikit.components.ai.AiMediaProcessManager
+import io.trtc.tuikit.chat.uikit.components.ai.tts.TtsPlaybackHelper
+import io.trtc.tuikit.chat.uikit.components.ai.tts.TtsTextSanitizer
+import io.trtc.tuikit.chat.uikit.components.ai.tts.VoiceMessageConfig
 import io.trtc.tuikit.chat.uikit.components.common.MessageOfflinePushInfoFactory
 import io.trtc.tuikit.chat.uikit.components.config.AppBuilderConfig
 import io.trtc.tuikit.chat.uikit.components.emojipicker.EmojiSpanHelper
@@ -28,8 +32,7 @@ import io.trtc.tuikit.chat.uikit.components.messageinput.config.MessageInputConf
 import io.trtc.tuikit.chat.uikit.components.messageinput.data.MessageInputMenuAction
 import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionInfo
 import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.GroupMemberPickerDialog
-import io.trtc.tuikit.atomicx.common.util.PublishParams
-import io.trtc.tuikit.atomicx.common.util.TUIEventBus
+import io.trtc.tuikit.chat.uikit.components.common.AtomicCallEventPublisher
 import io.trtc.tuikit.chat.uikit.components.messageinput.utils.VideoFrameExtractor
 import io.trtc.tuikit.chat.uikit.components.videorecorder.RecordMode
 import io.trtc.tuikit.chat.uikit.components.videorecorder.VideoRecordListener
@@ -82,6 +85,7 @@ class MessageInputViewModel(
     private var currentConversationTitle: String? = null
     private val attachmentFileResolver = MessageInputAttachmentFileResolver()
     private val audioTranscriber = AudioTranscriber()
+    private val recordTranslationTtsHelper = TtsPlaybackHelper()
 
     private val conversationState = conversationListStore.state
 
@@ -626,6 +630,59 @@ class MessageInputViewModel(
         )
     }
 
+    // Non-message-bound translation used by the record-transcription editing
+    // overlay. Always translates the immutable original transcription text so
+    // switching languages never compounds translation loss. Callbacks land on
+    // the main thread (AiMediaProcessManager guarantees this).
+    fun translateRecordText(
+        text: String,
+        targetLanguage: String,
+        onSuccess: (String) -> Unit,
+        onFailure: () -> Unit
+    ) {
+        if (text.isBlank() || targetLanguage.isBlank()) {
+            runOnMain { onFailure() }
+            return
+        }
+        AiMediaProcessManager.translateSingleText(
+            text = text,
+            targetLanguage = targetLanguage,
+            onSuccess = { translated -> onSuccess(translated) },
+            onFailure = { _, _ -> onFailure() }
+        )
+    }
+
+    fun startRecordTranslationSpeak(
+        context: Context,
+        text: String,
+        onStart: () -> Unit,
+        onComplete: () -> Unit,
+        onError: () -> Unit
+    ) {
+        val sanitized = TtsTextSanitizer.sanitize(text)
+        if (sanitized.isBlank()) {
+            runOnMain { onError() }
+            return
+        }
+        val voiceId = VoiceMessageConfig.getSelectedVoiceId(context)
+        recordTranslationTtsHelper.speak(
+            text = sanitized,
+            voiceId = voiceId,
+            onStart = { runOnMain { onStart() } },
+            onComplete = { runOnMain { onComplete() } },
+            onError = { runOnMain { onError() } }
+        )
+    }
+
+    fun stopRecordTranslationSpeak() {
+        recordTranslationTtsHelper.stop()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        recordTranslationTtsHelper.stop()
+    }
+
     fun setDraft(draft: String?) {
         conversationListStore.setConversationDraft(conversationID, draft?.takeIf { it.isNotEmpty() })
     }
@@ -826,41 +883,6 @@ class MessageInputViewModel(
         private const val CAPTURE_VIDEO_SUFFIX = ".mp4"
         private const val TIME_FORMAT_PATTERN = "yyyyMMdd_HHmmss"
         private const val ALBUM_PICKER_MAX_SELECTION = 9
-    }
-}
-
-internal object AtomicCallEventPublisher {
-    const val MEDIA_TYPE_AUDIO = "audio"
-    const val MEDIA_TYPE_VIDEO = "video"
-
-    private const val EVENT_START_CALL = "call.startCall"
-    private const val KEY_PARTICIPANT_IDS = "participantIds"
-    private const val KEY_MEDIA_TYPE = "mediaType"
-    private const val KEY_CHAT_GROUP_ID = "chatGroupId"
-    private const val KEY_TIMEOUT = "timeout"
-    private const val DEFAULT_TIMEOUT_SECONDS = 30
-
-    fun publishStartCall(
-        participantIds: List<String>,
-        mediaType: String,
-        chatGroupId: String? = null
-    ) {
-        if (participantIds.isEmpty()) {
-            return
-        }
-        val data = mutableMapOf<String, Any?>(
-            KEY_PARTICIPANT_IDS to participantIds,
-            KEY_MEDIA_TYPE to mediaType,
-            KEY_TIMEOUT to DEFAULT_TIMEOUT_SECONDS
-        )
-        if (!chatGroupId.isNullOrEmpty()) {
-            data[KEY_CHAT_GROUP_ID] = chatGroupId
-        }
-        TUIEventBus.shared.publish(
-            EVENT_START_CALL,
-            null,
-            PublishParams(isSticky = false, data = data)
-        )
     }
 }
 

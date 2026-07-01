@@ -87,10 +87,7 @@ internal object ImageViewerGallerySaver {
         if (!directory.exists() && !directory.mkdirs()) {
             return false
         }
-        val outputFile = File(directory, source.displayName(context))
-        if (outputFile.exists() && !outputFile.delete()) {
-            return false
-        }
+        val outputFile = resolveUniqueFile(directory, source.displayName(context))
         val success = copyToFile(context, source, outputFile)
         if (!success) {
             return false
@@ -129,6 +126,24 @@ internal object ImageViewerGallerySaver {
                 }
             }
         }.isSuccess
+    }
+
+    private fun resolveUniqueFile(directory: File, displayName: String): File {
+        val candidate = File(directory, displayName)
+        if (!candidate.exists()) {
+            return candidate
+        }
+        val dotIndex = displayName.lastIndexOf('.')
+        val baseName = if (dotIndex > 0) displayName.substring(0, dotIndex) else displayName
+        val extension = if (dotIndex > 0) displayName.substring(dotIndex) else ""
+        var index = 1
+        while (true) {
+            val next = File(directory, "$baseName($index)$extension")
+            if (!next.exists()) {
+                return next
+            }
+            index++
+        }
     }
 
     private fun appName(context: Context): String {

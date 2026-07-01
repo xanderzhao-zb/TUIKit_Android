@@ -27,8 +27,6 @@
     <string name="message_input_voice_transcription_empty">لم يتم التعرف على أي نص</string>
     <string name="message_input_audio_too_short">مدة التسجيل الصوتي قصيرة جدًا</string>
     <string name="message_input_audio_time_limit_reached">تم الوصول إلى الحد الأقصى لمدة التسجيل الصوتي</string>
-    <string name="message_input_record_audio_permission_title">يلزم إذن الميكروفون</string>
-    <string name="message_input_record_audio_permission_desc">يُستخدم لتسجيل الرسائل الصوتية وإرسالها.</string>
     <string name="message_input_record_audio_permission_settings_tip">يرجى تفعيل إذن الميكروفون من إعدادات النظام.</string>
     <string name="message_input_minimal_hint">رسالة</string>
     <string name="message_input_send">إرسال</string>

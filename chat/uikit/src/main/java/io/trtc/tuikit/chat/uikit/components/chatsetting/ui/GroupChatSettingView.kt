@@ -151,6 +151,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         actionSectionController = GroupChatSettingActionSection(
             context = context,
             createDivider = ::createDivider,
+            createSpacer = { createSpacer(10f) },
             canPerformAction = ::canPerformAction,
             onGroupDeletedProvider = { onGroupDeleted }
         )
@@ -462,7 +463,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         selfRole: GroupMemberRole,
         permission: GroupPermission
     ): Boolean {
-        return GroupPermissionManager.canPerformAction(groupType.value, selfRole.value, permission)
+        return GroupPermissionManager.canPerformAction(groupType, selfRole, permission)
     }
 
     private fun applyThemeColors(colors: ColorTokens) {

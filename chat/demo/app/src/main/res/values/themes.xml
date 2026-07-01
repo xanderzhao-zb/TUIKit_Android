@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.ChatView" parent="Theme.MaterialComponents.Light.NoActionBar">
+    <style name="demo_Theme_ChatView" parent="Theme.MaterialComponents.Light.NoActionBar">
         <item name="colorPrimary">#147AFF</item>
         <item name="colorPrimaryVariant">#0B5CC5</item>
         <item name="colorOnPrimary">@android:color/white</item>
@@ -12,10 +12,10 @@
         <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
-        <item name="android:colorBackground">@color/page_background</item>
+        <item name="android:colorBackground">@color/demo_page_background</item>
     </style>
 
-    <style name="TabActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+    <style name="demo_TabActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:width">36dp</item>
         <item name="android:height">36dp</item>
         <item name="android:color">@android:color/transparent</item>

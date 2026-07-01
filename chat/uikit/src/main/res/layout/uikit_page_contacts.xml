@@ -6,7 +6,7 @@
     android:layoutDirection="locale"
     android:orientation="vertical">
 
-    <io.trtc.tuikit.chat.widgets.PageHeaderView
+    <io.trtc.tuikit.chat.uikit.pages.PageHeaderView
         android:id="@+id/uikit_page_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />

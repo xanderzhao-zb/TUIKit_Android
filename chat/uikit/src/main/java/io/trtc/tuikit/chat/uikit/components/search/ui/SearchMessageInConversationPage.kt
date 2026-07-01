@@ -90,7 +90,7 @@ class SearchMessageInConversationPage(
         conversationArrow = ImageView(context).apply {
             val iconSize = dpToPx(16)
             layoutParams = LayoutParams(iconSize, iconSize)
-            setImageResource(R.drawable.ic_arrow_right)
+            setImageResource(R.drawable.chat_setting_ic_arrow_right)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
         }
         conversationCard.addView(conversationArrow)

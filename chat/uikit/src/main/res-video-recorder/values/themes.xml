@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="VideoRecorderAuthorizationPrompterDialog" parent="Theme.MaterialComponents.Light.Dialog.Alert">
+    <style name="video_recorder_authorization_prompter_dialog" parent="Theme.MaterialComponents.Light.Dialog.Alert">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">16dp</item>
         <item name="android:windowMinWidthMajor">@dimen/video_recorder_dialog_min_width</item>

@@ -28,8 +28,8 @@ import io.trtc.tuikit.atomicxcore.api.conversation.GetConversationInfoCompletion
 import io.trtc.tuikit.atomicxcore.api.group.GroupEvent
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
-import io.trtc.tuikit.chat.demo.BaseActivity
-import io.trtc.tuikit.chat.demo.Event
+import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.uikit.pages.ChatPageView
 import kotlinx.coroutines.CoroutineScope
@@ -87,7 +87,10 @@ class ChatActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_chat)
+        if (isFinishing) {
+            return
+        }
+        setContentView(R.layout.demo_activity_chat)
 
         val conversationID = intent?.getStringExtra(EXTRA_CONVERSATION_ID) ?: run {
             finish()
@@ -96,19 +99,19 @@ class ChatActivity : BaseActivity() {
         @Suppress("DEPRECATION")
         val locateMessage = intent?.getParcelableExtra<MessageInfo>(EXTRA_LOCATE_MESSAGE)
 
-        rootContainer = findViewById(R.id.chatRootContainer)
-        headerContainer = findViewById(R.id.chatHeaderContainer)
-        tvChatTitle = findViewById(R.id.tvChatTitle)
-        btnBack = findViewById(R.id.btnBack)
-        btnMore = findViewById(R.id.btnMore)
-        headerDivider = findViewById(R.id.headerDivider)
-        badgeContainer = findViewById(R.id.badgeContainer)
-        tvUnreadBadge = findViewById(R.id.tvUnreadBadge)
-        leftContainer = findViewById(R.id.leftContainer)
-        btnMultiSelectCancel = findViewById(R.id.btnMultiSelectCancel)
-        btnMultiSelectCancel.text = getString(R.string.chat_header_cancel)
+        rootContainer = findViewById(R.id.demo_chatRootContainer)
+        headerContainer = findViewById(R.id.demo_chatHeaderContainer)
+        tvChatTitle = findViewById(R.id.demo_tvChatTitle)
+        btnBack = findViewById(R.id.demo_btnBack)
+        btnMore = findViewById(R.id.demo_btnMore)
+        headerDivider = findViewById(R.id.demo_headerDivider)
+        badgeContainer = findViewById(R.id.demo_badgeContainer)
+        tvUnreadBadge = findViewById(R.id.demo_tvUnreadBadge)
+        leftContainer = findViewById(R.id.demo_leftContainer)
+        btnMultiSelectCancel = findViewById(R.id.demo_btnMultiSelectCancel)
+        btnMultiSelectCancel.text = getString(R.string.demo_chat_header_cancel)
         tvChatTitle.text = ChatTitleResolver.resolve(conversationID = conversationID)
-        val chatPageContainer = findViewById<FrameLayout>(R.id.chatPageContainer)
+        val chatPageContainer = findViewById<FrameLayout>(R.id.demo_chatPageContainer)
 
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())

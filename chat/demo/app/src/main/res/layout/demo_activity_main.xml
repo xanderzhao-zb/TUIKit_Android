@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/demo_mainContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/demo_viewPager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <View
+        android:id="@+id/demo_tabDivider"
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp" />
+
+    <FrameLayout
+        android:id="@+id/demo_bottomNavContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/demo_bottomNav"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:itemActiveIndicatorStyle="@style/demo_TabActiveIndicator"
+            app:itemIconSize="24dp"
+            app:itemPaddingBottom="6dp"
+            app:itemPaddingTop="6dp"
+            app:itemRippleColor="@android:color/transparent"
+            app:labelVisibilityMode="labeled"
+            app:menu="@menu/demo_bottom_nav_menu" />
+
+        <io.trtc.tuikit.chat.uikit.components.widgets.AvatarBadgeView
+            android:id="@+id/demo_messageUnreadBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="invisible" />
+    </FrameLayout>
+
+</LinearLayout>

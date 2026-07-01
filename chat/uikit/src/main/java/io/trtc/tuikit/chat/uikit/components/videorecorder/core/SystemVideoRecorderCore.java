@@ -544,7 +544,7 @@ public class SystemVideoRecorderCore implements IVideoRecorderCoreInterface {
         try (FileOutputStream output = new FileOutputStream(file)) {
             output.write(bytes);
         } catch (IOException e) {
-            Log.e(TAG, "保存图片失败", e);
+            Log.e(TAG, "Failed to save image", e);
             return false;
         }
         return true;

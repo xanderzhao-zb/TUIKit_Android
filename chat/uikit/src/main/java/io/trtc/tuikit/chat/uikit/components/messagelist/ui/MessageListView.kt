@@ -26,6 +26,7 @@ import io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListCo
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.MessageListBackground
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.MessageListConfigProtocol
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.MessageListCustomActionConfigProtocol
+import io.trtc.tuikit.chat.uikit.components.messagelist.listen.ListenPlaybackBar
 import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageCustomAction
 import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageCustomActionContext
 import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageUIAction
@@ -84,6 +85,7 @@ class MessageListView @JvmOverloads constructor(
     private val floatingEntryTextView: TextView
     private val joinCallBannerContainer: FrameLayout
     private val multiSelectBarContainer: FrameLayout
+    private val listenPlaybackBar: ListenPlaybackBar
     private lateinit var adapter: MessageListAdapter
     private lateinit var viewModel: MessageListViewModel
     private var viewScope: CoroutineScope? = null
@@ -206,6 +208,12 @@ class MessageListView @JvmOverloads constructor(
         floatingEntryTextView = findViewById(R.id.message_list_floating_entry_text)
         joinCallBannerContainer = findViewById(R.id.message_list_join_call_banner)
         multiSelectBarContainer = findViewById(R.id.message_list_multi_select_bar)
+        listenPlaybackBar = findViewById(R.id.message_list_listen_playback_bar)
+        listenPlaybackBar.setOnCloseClickListener {
+            if (::viewModel.isInitialized) {
+                viewModel.stopListenFromHere()
+            }
+        }
         backgroundView.setDefaultBackgroundColor(
             themeStore.themeState.value.currentTheme.tokens.color.bgColorOperate
         )
@@ -232,6 +240,7 @@ class MessageListView @JvmOverloads constructor(
                         MessageListTouchTargetHitTester.isMessageTouchTargetHit(recyclerView, e)
                     if (MessageListInputDismissPolicy.shouldDismissInputForTap(isMessageTouchTargetHit)) {
                         postBlankAreaClickEvent()
+                        collapseListenPlaybackBar()
                     }
                     return false
                 }
@@ -344,6 +353,7 @@ class MessageListView @JvmOverloads constructor(
         viewScope = null
         joinCallBannerController.release()
         if (::viewModel.isInitialized) {
+            viewModel.stopListenFromHere()
             viewModel.clearMessageReadCount()
         }
     }
@@ -488,6 +498,18 @@ class MessageListView @JvmOverloads constructor(
         }
 
         scope.launch {
+            viewModel.listenPlaybackState.collectLatest { state ->
+                if (state.isActive) {
+                    listenPlaybackBar.render(state.isLoading, state.currentText)
+                    listenPlaybackBar.visibility = View.VISIBLE
+                } else {
+                    listenPlaybackBar.collapse()
+                    listenPlaybackBar.visibility = View.GONE
+                }
+            }
+        }
+
+        scope.launch {
             viewModel.onSingleMessageForward.collectLatest { message ->
                 if (message != null) {
                     viewModel.forwardType = MessageForwardType.SEPARATE
@@ -577,6 +599,7 @@ class MessageListView @JvmOverloads constructor(
                 val colors = it.currentTheme.tokens.color
                 backgroundView.setDefaultBackgroundColor(colors.bgColorOperate)
                 applyFloatingEntryTheme()
+                listenPlaybackBar.applyColors(colors)
                 adapter.notifyDataSetChanged()
                 alignmentController.requestAlignment()
             }
@@ -1093,6 +1116,12 @@ class MessageListView @JvmOverloads constructor(
                 readReceiptController.syncVisibleReadReceipts()
                 updateFloatingEntryForScroll()
             }
+        }
+    }
+
+    private fun collapseListenPlaybackBar() {
+        if (listenPlaybackBar.visibility == View.VISIBLE) {
+            listenPlaybackBar.collapse()
         }
     }
 

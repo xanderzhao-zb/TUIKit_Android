@@ -242,7 +242,7 @@ class ForwardTargetSelectorDialog(
             )
 
             val arrow = ImageView(context).apply {
-                setImageResource(R.drawable.ic_arrow_right)
+                setImageResource(R.drawable.chat_setting_ic_arrow_right)
                 imageTintList = android.content.res.ColorStateList.valueOf(colors.textColorSecondary)
             }
             val arrowSize = dp2px(18f, dm).roundToInt()

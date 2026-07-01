@@ -1,5 +1,4 @@
 package io.trtc.tuikit.chat.uikit.components.audiorecorder.audiorecorderimpl
-import android.Manifest
 import android.os.Looper
 import android.util.Log
 import com.tencent.cloud.tuikit.engine.common.ContextProvider
@@ -10,7 +9,7 @@ import io.trtc.tuikit.chat.uikit.components.audiorecorder.audiorecordercore.Audi
 import io.trtc.tuikit.chat.uikit.components.audiorecorder.audiorecordercore.AudioRecorderSystem
 import io.trtc.tuikit.chat.uikit.components.audiorecorder.audiorecordercore.AudioRecorderTXUGC
 import io.trtc.tuikit.atomicx.common.permission.PermissionCallback
-import io.trtc.tuikit.atomicx.common.permission.PermissionRequester
+import io.trtc.tuikit.chat.uikit.components.common.ChatPermissionHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,18 +65,21 @@ class AudioRecorderImpl {
     ) {
         this.listener = listener
         Log.i(TAG, "start record filePath:$filePath")
-        PermissionRequester.newInstance(Manifest.permission.RECORD_AUDIO).callback(object : PermissionCallback() {
-            override fun onGranted() {
-                runOnMainThread {
-                    startRecordInternal(filePath, enableAIDeNoise, minRecordDurationMs, maxRecordDurationMs)
+        ChatPermissionHelper.requestPermission(
+            ChatPermissionHelper.PERMISSION_MICROPHONE,
+            object : PermissionCallback() {
+                override fun onGranted() {
+                    runOnMainThread {
+                        startRecordInternal(filePath, enableAIDeNoise, minRecordDurationMs, maxRecordDurationMs)
+                    }
+                }
+
+                override fun onDenied() {
+                    Log.i(TAG, "request record audio permission refuse")
+                    onRecordingComplete(AudioRecorderResultCode.ERROR_RECORD_PERMISSION_DENIED, "", 0)
                 }
             }
-
-            override fun onDenied() {
-                Log.i(TAG, "request record audio permission refuse")
-                onRecordingComplete(AudioRecorderResultCode.ERROR_RECORD_PERMISSION_DENIED, "", 0)
-            }
-        }).request()
+        )
     }
 
     private fun startRecordInternal(

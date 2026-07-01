@@ -21,15 +21,19 @@ import android.view.animation.LinearInterpolator
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.PopupWindow
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import io.trtc.tuikit.chat.uikit.R
+import io.trtc.tuikit.chat.uikit.components.ai.tts.VoiceMessageConfig
 import io.trtc.tuikit.chat.uikit.components.messageinput.keyboard.KeyboardInsetsUtil
 import io.trtc.tuikit.chat.uikit.components.messageinput.keyboard.LegacyKeyboardHeightProbe
 import io.trtc.tuikit.atomicx.theme.ThemeStore
+import io.trtc.tuikit.atomicx.widget.basicwidget.toast.AtomicToast
 import kotlin.math.abs
 import kotlin.math.sin
 
@@ -42,6 +46,9 @@ internal class MessageInputVoiceTranscriptionOverlay(
     private val onSendAudio: (String, Int) -> Unit,
     private val onSendText: (String) -> Unit,
     private val onDismissed: () -> Unit,
+    private val onTranslate: (String, String, (String) -> Unit, () -> Unit) -> Unit,
+    private val onStartSpeak: (String, () -> Unit, () -> Unit, () -> Unit) -> Unit,
+    private val onStopSpeak: () -> Unit,
 ) {
     private val context = anchorView.context
     private val density = context.resources.displayMetrics.density
@@ -61,6 +68,8 @@ internal class MessageInputVoiceTranscriptionOverlay(
     private val cancelLabel = TextView(context)
     private val sendAudioLabel = TextView(context)
     private val waveformView = OverlayWaveformBarView(context)
+    private val chipRow = LinearLayout(context)
+    private var chipRowLayoutParams: FrameLayout.LayoutParams? = null
     private var bubbleLayoutParams: FrameLayout.LayoutParams? = null
     private var editTextLayoutParams: FrameLayout.LayoutParams? = null
     private var cancelButtonLayoutParams: FrameLayout.LayoutParams? = null
@@ -88,7 +97,14 @@ internal class MessageInputVoiceTranscriptionOverlay(
         isOutsideTouchable = true
         inputMethodMode = PopupWindow.INPUT_METHOD_NEEDED
         setOnDismissListener {
+            isDismissed = true
+            languagePopupWindow?.let { popup ->
+                if (popup.isShowing) popup.dismiss()
+            }
+            languagePopupWindow = null
             cleanupKeyboardTracking()
+            isSpeaking = false
+            onStopSpeak()
             onDismissed()
         }
     }
@@ -100,6 +116,15 @@ internal class MessageInputVoiceTranscriptionOverlay(
     } else {
         TranscriptionState.TEXT
     }
+
+    // The immutable first transcription text. All translations use this as the
+    // source so switching languages never translates a prior translation.
+    private var originalText: String = if (state == TranscriptionState.TEXT) text.orEmpty() else ""
+    private var translatedText: String? = null
+    private var isTranslating = false
+    private var isSpeaking = false
+    private var isDismissed = false
+    private var languagePopupWindow: PopupWindow? = null
 
     init {
         buildLayout()
@@ -132,9 +157,22 @@ internal class MessageInputVoiceTranscriptionOverlay(
         } else {
             TranscriptionState.TEXT
         }
+        if (state == TranscriptionState.TEXT) {
+            if (originalText.isEmpty()) {
+                originalText = resultText.orEmpty()
+            }
+            translatedText = null
+            isTranslating = false
+            if (isSpeaking) {
+                isSpeaking = false
+                onStopSpeak()
+            }
+        }
         updateBubbleHeightForState(resultText)
         bindBubbleText(resultText)
+        renderChipRow()
         applyTheme()
+        updateOverlayLayout()
     }
 
     private fun buildLayout() {
@@ -152,6 +190,7 @@ internal class MessageInputVoiceTranscriptionOverlay(
             rootHeight = context.resources.displayMetrics.heightPixels,
             bubbleHeight = bubbleHeightPx,
             keyboardHeight = 0,
+            showChipRow = state == TranscriptionState.TEXT,
         )
         val bubbleLp = FrameLayout.LayoutParams((330 * density).toInt(), bubbleHeightPx)
         bubbleLp.leftMargin = scaleX(16)
@@ -189,6 +228,17 @@ internal class MessageInputVoiceTranscriptionOverlay(
         bubbleView.addView(loadingDotsView, dotsLp)
         bindBubbleText(text)
 
+        chipRow.orientation = LinearLayout.HORIZONTAL
+        val chipRowLp = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+        )
+        chipRowLp.leftMargin = scaleX(16)
+        chipRowLp.topMargin = initialLayout.chipRowTop
+        chipRowLayoutParams = chipRowLp
+        rootView.addView(chipRow, chipRowLp)
+        renderChipRow()
+
         cancelButtonLayoutParams = addCircleIcon(
             cancelButton,
             cancelIcon,
@@ -212,6 +262,7 @@ internal class MessageInputVoiceTranscriptionOverlay(
             262,
             initialLayout.sendTextButtonTop,
         )
+        alignBubbleArrowToSendButton()
         cancelLabelLayoutParams = addLabel(
             cancelLabel,
             context.getString(R.string.message_input_cancel),
@@ -347,6 +398,308 @@ internal class MessageInputVoiceTranscriptionOverlay(
         sendTextButton.isEnabled = state == TranscriptionState.TEXT
     }
 
+    private fun renderChipRow() {
+        chipRow.removeAllViews()
+        if (state != TranscriptionState.TEXT) {
+            chipRow.visibility = View.GONE
+            return
+        }
+        chipRow.visibility = View.VISIBLE
+        when {
+            translatedText == null -> {
+                chipRow.addView(
+                    buildChip(context.getString(R.string.voice_message_translate), enabled = !isTranslating) {
+                        onTranslateChipClicked()
+                    }
+                )
+            }
+            else -> {
+                chipRow.addView(
+                    buildChip(context.getString(R.string.voice_message_undo_translate), enabled = true) {
+                        onUndoTranslateClicked()
+                    }
+                )
+                chipRow.addView(
+                    buildChip(context.getString(R.string.voice_message_switch_language), enabled = !isTranslating) {
+                        onSwitchLanguageClicked()
+                    }
+                )
+                val speakLabelRes = if (isSpeaking) {
+                    R.string.voice_message_stop
+                } else {
+                    R.string.voice_message_read_aloud
+                }
+                chipRow.addView(
+                    buildChip(context.getString(speakLabelRes), enabled = true) {
+                        onReadAloudClicked()
+                    }
+                )
+            }
+        }
+    }
+
+    private fun buildChip(label: String, enabled: Boolean, onClick: (() -> Unit)?): TextView {
+        val c = colors
+        val chip = TextView(context)
+        chip.text = label
+        chip.gravity = Gravity.CENTER
+        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        chip.setTextColor(if (enabled) c.textColorPrimary else c.textColorDisable)
+        chip.setPadding(dp(12), dp(6), dp(12), dp(6))
+        chip.background = GradientDrawable().apply {
+            cornerRadius = 12f * density
+            setColor(c.buttonColorSecondaryDefault)
+        }
+        val lp = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        lp.rightMargin = dp(8)
+        chip.layoutParams = lp
+        chip.isEnabled = enabled
+        if (enabled && onClick != null) {
+            chip.setOnClickListener { onClick() }
+        }
+        return chip
+    }
+
+    private fun onTranslateChipClicked() {
+        if (isTranslating) return
+        val lang = VoiceMessageConfig.getRecordTranslateTargetLanguage(context)
+        if (lang.isEmpty()) {
+            showLanguageSelector { picked ->
+                VoiceMessageConfig.setRecordTranslateTargetLanguage(context, picked)
+                translateWith(picked)
+            }
+        } else {
+            translateWith(lang)
+        }
+    }
+
+    private fun onSwitchLanguageClicked() {
+        if (isTranslating) return
+        showLanguageSelector { picked ->
+            VoiceMessageConfig.setRecordTranslateTargetLanguage(context, picked)
+            translateWith(picked)
+        }
+    }
+
+    private fun onUndoTranslateClicked() {
+        if (isSpeaking) {
+            isSpeaking = false
+            onStopSpeak()
+        }
+        translatedText = null
+        setBubbleText(originalText)
+        renderChipRow()
+    }
+
+    private fun onReadAloudClicked() {
+        if (isSpeaking) {
+            isSpeaking = false
+            onStopSpeak()
+            renderChipRow()
+            return
+        }
+        val current = editText.text?.toString().orEmpty()
+        if (current.isBlank()) return
+        isSpeaking = true
+        renderChipRow()
+        onStartSpeak(
+            current,
+            {},
+            {
+                if (isDismissed) return@onStartSpeak
+                if (isSpeaking) {
+                    isSpeaking = false
+                    renderChipRow()
+                }
+            },
+            {
+                if (isDismissed) return@onStartSpeak
+                isSpeaking = false
+                renderChipRow()
+                AtomicToast.show(
+                    context,
+                    context.getString(R.string.voice_message_speak_failed),
+                    style = AtomicToast.Style.ERROR,
+                )
+            },
+        )
+    }
+
+    // Always translates from the immutable [originalText], never the current
+    // translation, so switching languages does not compound translation loss.
+    private fun translateWith(languageCode: String) {
+        if (originalText.isEmpty() || isTranslating) return
+        isTranslating = true
+        renderChipRow()
+        onTranslate(
+            originalText,
+            languageCode,
+            { translated ->
+                if (isDismissed) return@onTranslate
+                isTranslating = false
+                if (translated.isBlank()) {
+                    renderChipRow()
+                    AtomicToast.show(
+                        context,
+                        context.getString(R.string.voice_message_translate_failed),
+                        style = AtomicToast.Style.ERROR,
+                    )
+                    return@onTranslate
+                }
+                translatedText = translated
+                setBubbleText(translated)
+                renderChipRow()
+            },
+            {
+                if (isDismissed) return@onTranslate
+                isTranslating = false
+                renderChipRow()
+                AtomicToast.show(
+                    context,
+                    context.getString(R.string.voice_message_translate_failed),
+                    style = AtomicToast.Style.ERROR,
+                )
+            },
+        )
+    }
+
+    private fun setBubbleText(value: String) {
+        updateBubbleHeightForState(value)
+        editText.setText(value)
+        editText.setSelection(editText.text?.length ?: 0)
+        sendTextButton.isEnabled = state == TranscriptionState.TEXT && value.isNotBlank()
+    }
+
+    private fun showLanguageSelector(onPicked: (String) -> Unit) {
+        val c = colors
+        val currentLanguage = VoiceMessageConfig.getRecordTranslateTargetLanguage(context)
+        val contentView = FrameLayout(context)
+        val popupWindow = PopupWindow(
+            contentView,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            true,
+        ).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            isClippingEnabled = true
+            isTouchable = true
+            isOutsideTouchable = true
+            setOnDismissListener {
+                if (languagePopupWindow === this) languagePopupWindow = null
+            }
+        }
+        languagePopupWindow?.let { if (it.isShowing) it.dismiss() }
+        languagePopupWindow = popupWindow
+
+        val maskView = View(context).apply {
+            setBackgroundColor(c.bgColorMask)
+            setOnClickListener { popupWindow.dismiss() }
+        }
+        contentView.addView(
+            maskView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+
+        val panelBackgroundColor = c.bgColorOperate
+        val panel = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                cornerRadii = floatArrayOf(
+                    12f * density, 12f * density,
+                    12f * density, 12f * density,
+                    0f, 0f,
+                    0f, 0f,
+                )
+                setColor(panelBackgroundColor)
+            }
+        }
+        val maxPanelHeight = (context.resources.displayMetrics.heightPixels * 0.6f).toInt()
+        contentView.addView(
+            panel,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                maxPanelHeight,
+                Gravity.BOTTOM,
+            ),
+        )
+
+        val titleView = TextView(context).apply {
+            text = context.getString(R.string.voice_message_select_language)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(c.textColorSecondary)
+            setPadding(0, dp(16), 0, dp(16))
+        }
+        panel.addView(
+            titleView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
+        val listContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        TRANSLATE_LANGUAGE_OPTIONS.forEach { option ->
+            val isSelected = option.code == currentLanguage
+            val itemView = TextView(context).apply {
+                text = option.nativeName
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                includeFontPadding = false
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setTextColor(if (isSelected) c.textColorLink else c.textColorPrimary)
+                setPadding(dp(16), dp(14), dp(16), dp(14))
+                setOnClickListener {
+                    popupWindow.dismiss()
+                    onPicked(option.code)
+                }
+            }
+            listContainer.addView(
+                itemView,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+
+        val scrollView = ScrollView(context).apply {
+            addView(
+                listContainer,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+        panel.addView(
+            scrollView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f,
+            ),
+        )
+
+        if (isDismissed || !anchorView.isAttachedToWindow) {
+            languagePopupWindow = null
+            return
+        }
+        try {
+            popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, 0, 0)
+        } catch (exception: Exception) {
+            languagePopupWindow = null
+        }
+    }
+
     private fun installKeyboardTracking() {
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
             val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
@@ -417,8 +770,10 @@ internal class MessageInputVoiceTranscriptionOverlay(
             rootHeight = rootHeight,
             bubbleHeight = bubbleHeightPx,
             keyboardHeight = keyboardHeightPx,
+            showChipRow = state == TranscriptionState.TEXT,
         )
         updateTopMargin(bubbleView, bubbleLayoutParams, layout.bubbleTop)
+        updateTopMargin(chipRow, chipRowLayoutParams, layout.chipRowTop)
         updateTopMargin(cancelButton, cancelButtonLayoutParams, layout.cancelButtonTop)
         updateTopMargin(sendAudioButton, sendAudioButtonLayoutParams, layout.sendAudioButtonTop)
         updateTopMargin(sendTextButton, sendTextButtonLayoutParams, layout.sendTextButtonTop)
@@ -458,6 +813,7 @@ internal class MessageInputVoiceTranscriptionOverlay(
         rootHeight: Int,
         bubbleHeight: Int,
         keyboardHeight: Int,
+        showChipRow: Boolean,
     ): OverlayLayout {
         val safeRootHeight = rootHeight.coerceAtLeast(1)
         val iconButtonSize = dp(48)
@@ -470,6 +826,10 @@ internal class MessageInputVoiceTranscriptionOverlay(
         val sendTextToWaveformGap = dp(24)
         val bubbleToActionGap = dp(12)
         val bubbleToKeyboardGap = dp(24)
+        val bubbleToChipGap = if (showChipRow) dp(8) else 0
+        // The chip row sits between the bubble and the action row, so the
+        // bubble must leave room for both the chip row and its gap.
+        val chipBlock = if (showChipRow) dp(CHIP_ROW_HEIGHT_DP) + bubbleToChipGap else 0
 
         val waveformTop = (safeRootHeight - waveformBottom - waveformHeight).coerceAtLeast(0)
         val labelTop = (waveformTop - labelToWaveformGap - labelHeight).coerceAtLeast(0)
@@ -478,21 +838,36 @@ internal class MessageInputVoiceTranscriptionOverlay(
         val firstActionTop = minOf(iconButtonTop, sendTextButtonTop)
 
         val designBubbleTop = dp(549)
-        val maxBubbleTopBeforeActions = (firstActionTop - bubbleToActionGap - bubbleHeight).coerceAtLeast(0)
+        val maxBubbleTopBeforeActions =
+            (firstActionTop - bubbleToActionGap - chipBlock - bubbleHeight).coerceAtLeast(0)
         val maxBubbleTopBeforeKeyboard = if (keyboardHeight > 0) {
-            (safeRootHeight - keyboardHeight - bubbleToKeyboardGap - bubbleHeight).coerceAtLeast(0)
+            (safeRootHeight - keyboardHeight - bubbleToKeyboardGap - chipBlock - bubbleHeight).coerceAtLeast(0)
         } else {
             Int.MAX_VALUE
         }
 
+        val bubbleTop = minOf(designBubbleTop, maxBubbleTopBeforeActions, maxBubbleTopBeforeKeyboard)
         return OverlayLayout(
-            bubbleTop = minOf(designBubbleTop, maxBubbleTopBeforeActions, maxBubbleTopBeforeKeyboard),
+            bubbleTop = bubbleTop,
+            chipRowTop = bubbleTop + bubbleHeight + bubbleToChipGap,
             cancelButtonTop = iconButtonTop,
             sendAudioButtonTop = iconButtonTop,
             sendTextButtonTop = sendTextButtonTop,
             labelTop = labelTop,
             waveformTop = waveformTop,
         )
+    }
+
+    // Aligns the bubble's pointer with the horizontal center of the send button.
+    // The bubble uses a fixed density-based width while the send button is
+    // positioned proportionally via scaleX, so the pointer must be derived from
+    // the button's actual center to stay aligned across screen widths.
+    private fun alignBubbleArrowToSendButton() {
+        val sendButtonLeft = sendTextButtonLayoutParams?.leftMargin ?: scaleX(262)
+        val sendButtonWidth = sendTextButtonLayoutParams?.width ?: dp(80)
+        val bubbleLeft = bubbleLayoutParams?.leftMargin ?: scaleX(16)
+        val sendButtonCenterX = sendButtonLeft + sendButtonWidth / 2f
+        bubbleView.setArrowCenterX(sendButtonCenterX - bubbleLeft)
     }
 
     private fun updateLoadingDotsPosition() {
@@ -544,10 +919,33 @@ internal class MessageInputVoiceTranscriptionOverlay(
     private companion object {
         private const val DESIGN_WIDTH_DP = 390f
         private const val BUBBLE_TRIANGLE_HEIGHT_DP = 14
+        private const val CHIP_ROW_HEIGHT_DP = 32
+        private val TRANSLATE_LANGUAGE_OPTIONS = listOf(
+            RecordTranslateLanguage("zh", "简体中文"),
+            RecordTranslateLanguage("zh-TW", "繁體中文"),
+            RecordTranslateLanguage("en", "English"),
+            RecordTranslateLanguage("ja", "日本語"),
+            RecordTranslateLanguage("ko", "한국어"),
+            RecordTranslateLanguage("fr", "Français"),
+            RecordTranslateLanguage("es", "Español"),
+            RecordTranslateLanguage("it", "Italiano"),
+            RecordTranslateLanguage("de", "Deutsch"),
+            RecordTranslateLanguage("tr", "Türkçe"),
+            RecordTranslateLanguage("ru", "Русский"),
+            RecordTranslateLanguage("pt", "Português"),
+            RecordTranslateLanguage("vi", "Tiếng Việt"),
+            RecordTranslateLanguage("id", "Bahasa Indonesia"),
+            RecordTranslateLanguage("th", "ภาษาไทย"),
+            RecordTranslateLanguage("ms", "Bahasa Melayu"),
+            RecordTranslateLanguage("hi", "हिन्दी"),
+        )
     }
+
+    private data class RecordTranslateLanguage(val code: String, val nativeName: String)
 
     private data class OverlayLayout(
         val bubbleTop: Int,
+        val chipRowTop: Int,
         val cancelButtonTop: Int,
         val sendAudioButtonTop: Int,
         val sendTextButtonTop: Int,
@@ -561,6 +959,7 @@ private class TranscriptionBubbleView(context: Context) : FrameLayout(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val path = Path()
     private var bubbleColor = Color.TRANSPARENT
+    private var arrowCenterX: Float? = null
 
     init {
         setWillNotDraw(false)
@@ -571,16 +970,23 @@ private class TranscriptionBubbleView(context: Context) : FrameLayout(context) {
         invalidate()
     }
 
+    fun setArrowCenterX(x: Float) {
+        arrowCenterX = x
+        invalidate()
+    }
+
     override fun onDraw(canvas: Canvas) {
         val triangleHeight = 14f * density
         val bodyBottom = height - triangleHeight
         val radius = 8f * density
+        val halfArrowWidth = 12f * density
         path.reset()
         path.addRoundRect(RectF(0f, 0f, width.toFloat(), bodyBottom), radius, radius, Path.Direction.CW)
-        val centerX = width - 64f * density
-        path.moveTo(centerX - 12f * density, bodyBottom)
+        val centerX = (arrowCenterX ?: (width - 64f * density))
+            .coerceIn(radius + halfArrowWidth, width - radius - halfArrowWidth)
+        path.moveTo(centerX - halfArrowWidth, bodyBottom)
         path.lineTo(centerX, height.toFloat())
-        path.lineTo(centerX + 12f * density, bodyBottom)
+        path.lineTo(centerX + halfArrowWidth, bodyBottom)
         path.close()
         paint.color = bubbleColor
         canvas.drawPath(path, paint)

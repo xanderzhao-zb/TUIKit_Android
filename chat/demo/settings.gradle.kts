@@ -31,10 +31,10 @@ pluginManagement {
                 includeGroupByRegex("androidx.*")
             }
         }
+        maven("https://mirrors.tencent.com/nexus/repository/maven-public/")
+        maven("https://mirrors.tencent.com/repository/maven/liteavsdk")
         mavenCentral()
         gradlePluginPortal()
-        maven("https://mirrors.tencent.com/repository/maven/liteavsdk")
-        maven("https://mirrors.tencent.com/nexus/repository/maven-public/")
     }
 }
 
@@ -42,9 +42,9 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         google()
-        mavenCentral()
-        maven("https://mirrors.tencent.com/repository/maven/liteavsdk")
         maven("https://mirrors.tencent.com/nexus/repository/maven-public/")
+        maven("https://mirrors.tencent.com/repository/maven/liteavsdk")
+        mavenCentral()
     }
 }
 

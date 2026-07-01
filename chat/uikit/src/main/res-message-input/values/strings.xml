@@ -27,8 +27,6 @@
     <string name="message_input_voice_transcription_empty">No text recognized</string>
     <string name="message_input_audio_too_short">The voice recording is too short</string>
     <string name="message_input_audio_time_limit_reached">The voice recording time limit has been reached</string>
-    <string name="message_input_record_audio_permission_title">Microphone permission required</string>
-    <string name="message_input_record_audio_permission_desc">Used to record and send voice messages.</string>
     <string name="message_input_record_audio_permission_settings_tip">Please enable microphone permission in Settings.</string>
     <string name="message_input_minimal_hint">Message</string>
     <string name="message_input_send">Send</string>

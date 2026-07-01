@@ -20,8 +20,8 @@ import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
-import io.trtc.tuikit.chat.demo.BaseActivity
-import io.trtc.tuikit.chat.demo.Event
+import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -66,21 +66,24 @@ class ChatSettingActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_chat_setting)
+        if (isFinishing) {
+            return
+        }
+        setContentView(R.layout.demo_activity_chat_setting)
 
         val userID = intent.getStringExtra(EXTRA_USER_ID)
         val groupID = intent.getStringExtra(EXTRA_GROUP_ID)
         val needNavigateToChat = intent.getBooleanExtra(EXTRA_NEED_NAVIGATE_TO_CHAT, false)
 
-        val rootContainer = findViewById<LinearLayout>(R.id.chatSettingRootContainer)
-        val headerContainer = findViewById<LinearLayout>(R.id.chatHeaderContainer)
-        val tvTitle = findViewById<TextView>(R.id.tvChatTitle)
-        val btnBack = findViewById<ImageView>(R.id.btnBack)
-        val btnMore = findViewById<ImageView>(R.id.btnMore)
-        val leftContainer = findViewById<LinearLayout>(R.id.leftContainer)
-        val headerDivider = findViewById<View>(R.id.headerDivider)
-        val badgeContainer = findViewById<FrameLayout>(R.id.badgeContainer)
-        val settingContainer = findViewById<FrameLayout>(R.id.chatSettingContainer)
+        val rootContainer = findViewById<LinearLayout>(R.id.demo_chatSettingRootContainer)
+        val headerContainer = findViewById<LinearLayout>(R.id.demo_chatHeaderContainer)
+        val tvTitle = findViewById<TextView>(R.id.demo_tvChatTitle)
+        val btnBack = findViewById<ImageView>(R.id.demo_btnBack)
+        val btnMore = findViewById<ImageView>(R.id.demo_btnMore)
+        val leftContainer = findViewById<LinearLayout>(R.id.demo_leftContainer)
+        val headerDivider = findViewById<View>(R.id.demo_headerDivider)
+        val badgeContainer = findViewById<FrameLayout>(R.id.demo_badgeContainer)
+        val settingContainer = findViewById<FrameLayout>(R.id.demo_chatSettingContainer)
 
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -95,7 +98,7 @@ class ChatSettingActivity : BaseActivity() {
         badgeContainer.visibility = View.GONE
 
         if (!userID.isNullOrEmpty()) {
-            tvTitle.text = getString(R.string.chat_setting_contact_info)
+            tvTitle.text = getString(R.string.demo_chat_setting_contact_info)
             val settingView = C2CChatSettingView(this)
             settingContainer.addView(settingView)
             settingView.setup(
@@ -112,7 +115,7 @@ class ChatSettingActivity : BaseActivity() {
                 }
             )
         } else if (!groupID.isNullOrEmpty()) {
-            tvTitle.text = getString(R.string.chat_setting_group_info)
+            tvTitle.text = getString(R.string.demo_chat_setting_group_info)
             val settingView = GroupChatSettingView(this)
             settingContainer.addView(settingView)
             settingView.setup(

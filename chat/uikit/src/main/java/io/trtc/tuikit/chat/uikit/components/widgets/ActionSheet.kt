@@ -47,7 +47,8 @@ class ActionSheet private constructor(
     companion object {
         private const val CORNER_RADIUS_DP = 14f
         private const val OPTION_VERTICAL_PADDING_DP = 16f
-        private const val HORIZONTAL_MARGIN_DP = 8f
+        private const val HORIZONTAL_MARGIN_DP = 16f
+        private const val TABLET_SMALLEST_WIDTH_DP = 600
         private const val GAP_DP = 6f
         private const val BOTTOM_PADDING_DP = 8f
         private const val DIVIDER_HEIGHT_DP = 1f
@@ -103,14 +104,22 @@ class ActionSheet private constructor(
         val cancelButtonEstimatedHeight = dp2px(70f, dm).toInt()
         val maxOptionsHeight = (screenHeight * MAX_HEIGHT_RATIO - cancelButtonEstimatedHeight - bottomPaddingPx).toInt()
 
+        val screenWidth = dm.widthPixels
+        val isTablet = context.resources.configuration.smallestScreenWidthDp >= TABLET_SMALLEST_WIDTH_DP
+        val contentWidth = if (isTablet) {
+            screenWidth / 2
+        } else {
+            screenWidth - horizontalMarginPx * 2
+        }
+
         val contentColumn = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
+                contentWidth,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             ).apply {
-                setMargins(horizontalMarginPx, 0, horizontalMarginPx, bottomPaddingPx)
+                setMargins(0, 0, 0, bottomPaddingPx)
             }
             isClickable = true
         }
@@ -181,10 +190,8 @@ class ActionSheet private constructor(
         optionsScrollView.addView(optionsColumn)
         optionsWrapper.addView(optionsScrollView)
 
-        val screenWidth = dm.widthPixels
-        val availableWidth = screenWidth - horizontalMarginPx * 2
         optionsColumn.measure(
-            View.MeasureSpec.makeMeasureSpec(availableWidth, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(contentWidth, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         )
         val optionsNaturalHeight = optionsColumn.measuredHeight

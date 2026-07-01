@@ -59,7 +59,9 @@
                 android:id="@+id/video_recorder_beauty_type_tab_view"
                 android:layout_width="wrap_content"
                 android:layout_height="42dp"
+                android:background="@android:color/transparent"
                 android:gravity="center_vertical"
+                app:tabBackground="@android:color/transparent"
                 app:tabIndicator="@android:color/transparent" />
 
         <ImageView

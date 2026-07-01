@@ -240,8 +240,8 @@ public class RecordSettingView extends RelativeLayout {
 
         public SettingItemViewHolder(View rootView) {
             mRootView = rootView;
-            mIcon = mRootView.findViewById(R.id.icon);
-            mTitle = mRootView.findViewById(R.id.title);
+            mIcon = mRootView.findViewById(R.id.video_recorder_setting_icon);
+            mTitle = mRootView.findViewById(R.id.video_recorder_setting_title);
         }
 
         public void setIconRes(int iconResId) {

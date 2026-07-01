@@ -35,7 +35,7 @@ import io.trtc.tuikit.chat.uikit.components.audiorecorder.AudioRecorderListener
 import io.trtc.tuikit.chat.uikit.components.audiorecorder.AudioRecorderResult
 import io.trtc.tuikit.chat.uikit.components.audiorecorder.AudioRecorderResultCode
 import io.trtc.tuikit.atomicx.common.permission.PermissionCallback
-import io.trtc.tuikit.atomicx.common.permission.PermissionRequester
+import io.trtc.tuikit.chat.uikit.components.common.ChatPermissionHelper
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.widget.basicwidget.toast.AtomicToast
 
@@ -274,11 +274,9 @@ class AudioRecorderView @JvmOverloads constructor(
     }
 
     private fun requestRecordPermission() {
-        PermissionRequester.newInstance(android.Manifest.permission.RECORD_AUDIO)
-            .title(context.getString(R.string.message_input_record_audio_permission_title))
-            .description(context.getString(R.string.message_input_record_audio_permission_desc))
-            .settingsTip(context.getString(R.string.message_input_record_audio_permission_settings_tip))
-            .callback(object : PermissionCallback() {
+        ChatPermissionHelper.requestPermission(
+            ChatPermissionHelper.PERMISSION_MICROPHONE,
+            object : PermissionCallback() {
                 override fun onGranted() {
                     AtomicToast.show(
                         context,
@@ -294,8 +292,8 @@ class AudioRecorderView @JvmOverloads constructor(
                         style = AtomicToast.Style.WARNING,
                     )
                 }
-            })
-            .request()
+            }
+        )
     }
 
     private fun hasRecordPermission(): Boolean {

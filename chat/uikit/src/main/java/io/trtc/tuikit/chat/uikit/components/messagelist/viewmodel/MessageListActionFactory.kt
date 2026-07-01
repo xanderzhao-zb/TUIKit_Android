@@ -19,7 +19,8 @@ internal data class MessageListActionCallbacks(
     val onForwardSingleMessage: (MessageInfo) -> Unit,
     val onConvertVoiceToText: (MessageInfo) -> Unit,
     val onTranslateText: (MessageInfo) -> Unit,
-    val onQuoteMessage: (MessageInfo, String) -> Unit
+    val onQuoteMessage: (MessageInfo, String) -> Unit,
+    val onListenFromHere: (MessageInfo) -> Unit
 )
 
 internal class MessageListActionFactory(
@@ -154,6 +155,15 @@ internal class MessageListActionFactory(
             }
         }
 
+        actions.add(
+            MessageUIAction(
+                name = context.getString(R.string.voice_message_listen_from_here),
+                icon = R.drawable.message_list_menu_listen_from_here_icon,
+                order = ACTION_ORDER_LISTEN_FROM_HERE,
+                action = { callbacks.onListenFromHere(messageInfo) }
+            )
+        )
+
         return actions
     }
 
@@ -172,6 +182,7 @@ internal class MessageListActionFactory(
         const val ACTION_ORDER_DELETE = 500
         const val ACTION_ORDER_CONVERT_TO_TEXT = 600
         const val ACTION_ORDER_TRANSLATE = 700
+        const val ACTION_ORDER_LISTEN_FROM_HERE = 800
     }
 }
 

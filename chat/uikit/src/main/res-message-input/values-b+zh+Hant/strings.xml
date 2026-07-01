@@ -27,8 +27,6 @@
     <string name="message_input_voice_transcription_empty">未識別到文字內容</string>
     <string name="message_input_audio_too_short">語音錄製時間太短</string>
     <string name="message_input_audio_time_limit_reached">語音錄製時間已達上限</string>
-    <string name="message_input_record_audio_permission_title">需要麥克風權限</string>
-    <string name="message_input_record_audio_permission_desc">用於錄製並傳送語音訊息。</string>
     <string name="message_input_record_audio_permission_settings_tip">請在系統設定中開啟麥克風權限。</string>
     <string name="message_input_minimal_hint">輸入訊息</string>
     <string name="message_input_send">傳送</string>

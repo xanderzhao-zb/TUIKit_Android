@@ -38,7 +38,7 @@ public class VideoRecorderAuthorizationPrompter {
             prompterTv.setText(R.string.video_recorder_authorization_prompter_no_liteav_sdk);
         }
 
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context, R.style.VideoRecorderAuthorizationPrompterDialog)
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context, R.style.video_recorder_authorization_prompter_dialog)
                 .setView(dialogView)
                 .setPositiveButton(VideoRecorderResourceUtils.getString(R.string.video_recorder_confirm), null)
                 .setOnDismissListener(dialog -> {

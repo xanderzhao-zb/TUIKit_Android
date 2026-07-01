@@ -14,6 +14,7 @@ import io.trtc.tuikit.chat.uikit.components.common.onEvent
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInputConfig
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.MessageInputConfigProtocol
 import io.trtc.tuikit.chat.uikit.components.messageinput.keyboard.KeyboardBridge
+import io.trtc.tuikit.chat.uikit.components.messageinput.keyboard.WindowSoftInputModeGuard
 import io.trtc.tuikit.chat.uikit.components.messageinput.state.InputCoordinator
 import io.trtc.tuikit.chat.uikit.components.messageinput.state.InputMode
 import io.trtc.tuikit.chat.uikit.components.messageinput.state.InputModeEvent
@@ -51,6 +52,7 @@ class MessageInputView @JvmOverloads constructor(
     private var draftCollectorJob: kotlinx.coroutines.Job? = null
 
     private var keyboardBridge: KeyboardBridge? = null
+    private val softInputModeGuard = WindowSoftInputModeGuard()
     private lateinit var coordinator: InputCoordinator
 
     private var lastRenderedState: InputUiState? = null
@@ -149,6 +151,7 @@ class MessageInputView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        softInputModeGuard.apply(context)
         viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         startRuntime()
     }
@@ -225,6 +228,7 @@ class MessageInputView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         stopRuntime(saveDraft = true)
+        softInputModeGuard.restore()
     }
 
     private fun handleQuoteMessageEvent(event: Map<*, *>) {
@@ -625,6 +629,25 @@ class MessageInputView @JvmOverloads constructor(
             onDismissed = {
                 resumeKeyboardBridgeAfterVoiceTranscriptionOverlay()
                 clearVoiceTranscriptionOverlayState()
+            },
+            onTranslate = { sourceText, targetLanguage, onSuccess, onFailure ->
+                val vm = viewModel
+                if (vm != null) {
+                    vm.translateRecordText(sourceText, targetLanguage, onSuccess, onFailure)
+                } else {
+                    onFailure()
+                }
+            },
+            onStartSpeak = { speakText, onStart, onComplete, onError ->
+                val vm = viewModel
+                if (vm != null) {
+                    vm.startRecordTranslationSpeak(context, speakText, onStart, onComplete, onError)
+                } else {
+                    onError()
+                }
+            },
+            onStopSpeak = {
+                viewModel?.stopRecordTranslationSpeak()
             },
         ).also { it.show() }
     }

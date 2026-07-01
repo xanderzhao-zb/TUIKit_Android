@@ -132,7 +132,7 @@ class GroupManagementView(
         viewScope?.launch {
             combine(viewModel.groupType, viewModel.selfRole) { type, role ->
                 GroupPermissionManager.canPerformAction(
-                    type.value, role.value, GroupPermission.SET_GROUP_MEMBER_ROLE
+                    type, role, GroupPermission.SET_GROUP_MEMBER_ROLE
                 )
             }.collectLatest { allowed ->
                 canManageAdmins = allowed

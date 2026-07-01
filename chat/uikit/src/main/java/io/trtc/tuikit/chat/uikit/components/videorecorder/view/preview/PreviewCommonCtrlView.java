@@ -190,7 +190,7 @@ public class PreviewCommonCtrlView extends RelativeLayout {
     private void initSendBtn() {
         Button button = mRootView.findViewById(R.id.video_recorder_send_btn);
         button.setBackground(
-                VideoRecorderResourceUtils.getDrawable(mContext, R.drawable.video_edit_send_button,
+                VideoRecorderResourceUtils.getDrawable(mContext, R.drawable.video_recorder_edit_send_button,
                         VideoRecorderConfigInternal.getInstance().getThemeColor()));
         button.setGravity(Gravity.CENTER);
         button.setText(VideoRecorderResourceUtils.getString(R.string.video_recorder_send));

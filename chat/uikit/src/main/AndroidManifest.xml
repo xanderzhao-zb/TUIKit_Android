@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application>
 
@@ -31,7 +34,7 @@
         <activity
             android:name=".components.videoplayer.ui.VideoPlayerActivity"
             android:exported="false"
-            android:theme="@style/Theme.VideoPlayer.FullScreen" />
+            android:theme="@style/video_player_theme_fullscreen" />
 
         <activity
             android:name=".components.videorecorder.view.VideoRecorderBridgeActivity"
@@ -50,7 +53,7 @@
         <activity
             android:name=".components.imageviewer.ui.ImageViewerActivity"
             android:exported="false"
-            android:theme="@style/Theme.VideoPlayer.FullScreen" />
+            android:theme="@style/video_player_theme_fullscreen" />
     </application>
 
 </manifest>

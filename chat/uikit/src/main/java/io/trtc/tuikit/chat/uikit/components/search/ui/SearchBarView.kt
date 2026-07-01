@@ -156,11 +156,11 @@ class SearchBarView @JvmOverloads constructor(
     fun applyTheme() {
         val colors = ThemeStore.shared(context).themeState.value.currentTheme.tokens.color
         setBackgroundColor(colors.bgColorOperate)
-        searchIcon.setImageResource(R.drawable.ic_search)
+        searchIcon.setImageResource(R.drawable.search_ic_search)
         searchIcon.setColorFilter(colors.textColorTertiary)
         editText.setTextColor(colors.textColorPrimary)
         editText.setHintTextColor(colors.textColorTertiary)
-        clearButton.setImageResource(R.drawable.ic_search_clear)
+        clearButton.setImageResource(R.drawable.search_ic_search_clear)
         clearButton.setColorFilter(colors.textColorPrimary)
         cancelButton.setTextColor(colors.textColorLink)
 

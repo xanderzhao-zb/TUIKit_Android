@@ -15,6 +15,10 @@ import io.trtc.tuikit.chat.uikit.components.messageinput.viewmodel.AlbumPickerPr
 import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionInfo
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.MessageListConfigProtocol
+import io.trtc.tuikit.chat.uikit.components.messagelist.listen.ListenFromHereController
+import io.trtc.tuikit.chat.uikit.components.messagelist.listen.ListenPlanResources
+import io.trtc.tuikit.chat.uikit.components.messagelist.listen.ListenPlaybackState
+import io.trtc.tuikit.chat.uikit.components.messagelist.listen.buildListenPlan
 import io.trtc.tuikit.chat.uikit.components.messagelist.model.LoadingState
 import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageUIAction
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageQuoteLocatePolicy
@@ -196,6 +200,9 @@ class MessageListViewModel(
         }
     )
     val audioPlayingState = audioController.audioPlayingState
+
+    private val listenFromHereController = ListenFromHereController()
+    val listenPlaybackState: StateFlow<ListenPlaybackState> = listenFromHereController.state
 
     private val _processingAuxiliaryTextMessageIds = MutableStateFlow<Set<String>>(emptySet())
     val processingAuxiliaryTextMessageIds: StateFlow<Set<String>> =
@@ -384,9 +391,41 @@ class MessageListViewModel(
                 onForwardSingleMessage = dialogStateStore::showSingleMessageForward,
                 onConvertVoiceToText = ::convertVoiceToText,
                 onTranslateText = ::translateText,
-                onQuoteMessage = ::quoteMessage
+                onQuoteMessage = ::quoteMessage,
+                onListenFromHere = ::startListenFromHere
             )
         ).create(context, messageInfo)
+    }
+
+    fun startListenFromHere(message: MessageInfo) {
+        val messages = messageList.value
+        val targetId = message.msgID.takeIf { it.isNotBlank() } ?: return
+        val startIndex = messages.indexOfFirst { it.msgID == targetId }
+        if (startIndex < 0) {
+            return
+        }
+        // messageList index 0 is the newest; reversing [0..startIndex] yields the
+        // tapped -> newest range in chronological (oldest -> newest) order.
+        val orderedRange = messages.subList(0, startIndex + 1).asReversed()
+        val plan = buildListenPlan(orderedRange, buildListenPlanResources())
+        listenFromHereController.start(plan)
+    }
+
+    fun stopListenFromHere() {
+        listenFromHereController.stop()
+    }
+
+    private fun buildListenPlanResources(): ListenPlanResources {
+        return ListenPlanResources(
+            selfSpeaker = getLocalizedString(R.string.voice_message_listen_self_speaker),
+            says = { name -> getLocalizedString(R.string.voice_message_listen_says, name) },
+            sentImage = { name -> getLocalizedString(R.string.voice_message_listen_sent_image, name) },
+            sentVideo = { name -> getLocalizedString(R.string.voice_message_listen_sent_video, name) },
+            sentFile = { name -> getLocalizedString(R.string.voice_message_listen_sent_file, name) },
+            sentMerged = { name, title ->
+                getLocalizedString(R.string.voice_message_listen_sent_merged, name, title)
+            }
+        )
     }
 
     private fun isGroupChat(conversationID: String): Boolean {
@@ -1206,6 +1245,7 @@ class MessageListViewModel(
     override fun onCleared() {
         mediaPreviewController.clear()
         audioController.release()
+        listenFromHereController.stop()
         resourceCoordinator.clear()
         super.onCleared()
     }

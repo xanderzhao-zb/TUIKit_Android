@@ -178,7 +178,7 @@ internal class LongPressActionMenuBuilder(
         val iconTint = if (action.dangerousAction) {
             colors.textColorError
         } else {
-            colors.textColorSecondary
+            colors.textColorPrimary
         }
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -199,7 +199,7 @@ internal class LongPressActionMenuBuilder(
                         imageTintList = ColorStateList.valueOf(iconTint)
                     }
                 },
-                LinearLayout.LayoutParams(20.dp, 20.dp).apply {
+                LinearLayout.LayoutParams(18.dp, 18.dp).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
                 }
             )

@@ -61,28 +61,28 @@ class ContactListViewModel(
             DefaultContactItem(
                 id = "new_contacts_applications",
                 titleResID = R.string.contact_list_new_contacts,
-                iconResID = R.drawable.ic_contact_list_new_contacts,
+                iconResID = R.drawable.contact_list_ic_new_contacts,
                 badgeCount = friendApplicationCount,
                 onClick = onNavigateToFriendApplications
             ),
             DefaultContactItem(
                 id = "new_group_applications",
                 titleResID = R.string.contact_list_new_group_applications,
-                iconResID = R.drawable.ic_contact_list_group_notification,
+                iconResID = R.drawable.contact_list_ic_group_notification,
                 badgeCount = groupApplicationCount,
                 onClick = onNavigateToGroupApplications
             ),
             DefaultContactItem(
                 id = "my_group",
                 titleResID = R.string.contact_list_my_group,
-                iconResID = R.drawable.ic_contact_list_my_group,
+                iconResID = R.drawable.contact_list_ic_my_group,
                 badgeCount = kotlinx.coroutines.flow.MutableStateFlow(0),
                 onClick = onNavigateToMyGroup
             ),
             DefaultContactItem(
                 id = "blacklist",
                 titleResID = R.string.contact_list_blacklist,
-                iconResID = R.drawable.ic_contact_list_blacklist,
+                iconResID = R.drawable.contact_list_ic_blacklist,
                 badgeCount = kotlinx.coroutines.flow.MutableStateFlow(0),
                 onClick = onNavigateToBlacklist
             )

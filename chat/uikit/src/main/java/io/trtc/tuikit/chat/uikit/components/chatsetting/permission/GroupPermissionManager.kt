@@ -1,6 +1,6 @@
 package io.trtc.tuikit.chat.uikit.components.chatsetting.permission
-import com.tencent.imsdk.v2.V2TIMGroupMemberFullInfo
-import com.tencent.imsdk.v2.V2TIMManager
+import io.trtc.tuikit.atomicxcore.api.group.GroupMemberRole
+import io.trtc.tuikit.atomicxcore.api.group.GroupType
 
 enum class GroupPermission {
     SET_GROUP_NAME,
@@ -29,13 +29,13 @@ enum class GroupPermission {
 
 object GroupPermissionManager {
 
-    private val permissionMatrix: Map<String, Map<Int, Map<GroupPermission, Boolean>>> =
+    private val permissionMatrix: Map<GroupType, Map<GroupMemberRole, Map<GroupPermission, Boolean>>> =
         buildPermissionMatrix()
 
-    private fun buildPermissionMatrix(): Map<String, Map<Int, Map<GroupPermission, Boolean>>> {
+    private fun buildPermissionMatrix(): Map<GroupType, Map<GroupMemberRole, Map<GroupPermission, Boolean>>> {
         return mapOf(
-            V2TIMManager.GROUP_TYPE_WORK to mapOf(
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_OWNER to createPermissionMap(
+            GroupType.WORK to mapOf(
+                GroupMemberRole.OWNER to createPermissionMap(
                     setGroupName = true, setGroupAvatar = true, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = true,
                     setGroupManagement = true, getGroupType = true,
@@ -46,7 +46,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = true,
                     transferOwner = true, dismissGroup = false, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_ADMIN to createPermissionMap(
+                GroupMemberRole.ADMIN to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = false,
                     setGroupManagement = false, getGroupType = true,
@@ -57,7 +57,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = true,
                     transferOwner = false, dismissGroup = false, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_MEMBER to createPermissionMap(
+                GroupMemberRole.MEMBER to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = false,
                     setGroupManagement = false, getGroupType = true,
@@ -69,8 +69,8 @@ object GroupPermissionManager {
                     transferOwner = false, dismissGroup = false, reportGroup = true
                 )
             ),
-            V2TIMManager.GROUP_TYPE_PUBLIC to mapOf(
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_OWNER to createPermissionMap(
+            GroupType.PUBLIC_GROUP to mapOf(
+                GroupMemberRole.OWNER to createPermissionMap(
                     setGroupName = true, setGroupAvatar = true, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = true,
                     setGroupManagement = true, getGroupType = true,
@@ -81,7 +81,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = false,
                     transferOwner = true, dismissGroup = true, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_ADMIN to createPermissionMap(
+                GroupMemberRole.ADMIN to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = true,
                     setGroupManagement = true, getGroupType = true,
@@ -92,7 +92,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = true,
                     transferOwner = false, dismissGroup = false, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_MEMBER to createPermissionMap(
+                GroupMemberRole.MEMBER to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = false,
                     setGroupManagement = false, getGroupType = true,
@@ -104,8 +104,8 @@ object GroupPermissionManager {
                     transferOwner = false, dismissGroup = false, reportGroup = true
                 )
             ),
-            V2TIMManager.GROUP_TYPE_MEETING to mapOf(
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_OWNER to createPermissionMap(
+            GroupType.MEETING to mapOf(
+                GroupMemberRole.OWNER to createPermissionMap(
                     setGroupName = true, setGroupAvatar = true, sendMessage = true,
                     setDoNotDisturb = false, pinGroup = true, setGroupNotice = true,
                     setGroupManagement = true, getGroupType = true,
@@ -116,7 +116,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = false,
                     transferOwner = true, dismissGroup = true, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_ADMIN to createPermissionMap(
+                GroupMemberRole.ADMIN to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = false, pinGroup = true, setGroupNotice = true,
                     setGroupManagement = true, getGroupType = true,
@@ -127,7 +127,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = true,
                     transferOwner = false, dismissGroup = false, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_MEMBER to createPermissionMap(
+                GroupMemberRole.MEMBER to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = false, pinGroup = true, setGroupNotice = false,
                     setGroupManagement = false, getGroupType = true,
@@ -139,8 +139,8 @@ object GroupPermissionManager {
                     transferOwner = false, dismissGroup = false, reportGroup = true
                 )
             ),
-            V2TIMManager.GROUP_TYPE_COMMUNITY to mapOf(
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_OWNER to createPermissionMap(
+            GroupType.COMMUNITY to mapOf(
+                GroupMemberRole.OWNER to createPermissionMap(
                     setGroupName = true, setGroupAvatar = true, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = true,
                     setGroupManagement = true, getGroupType = true,
@@ -151,7 +151,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = false,
                     transferOwner = true, dismissGroup = true, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_ADMIN to createPermissionMap(
+                GroupMemberRole.ADMIN to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = true,
                     setGroupManagement = true, getGroupType = true,
@@ -162,7 +162,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = true,
                     transferOwner = false, dismissGroup = false, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_MEMBER to createPermissionMap(
+                GroupMemberRole.MEMBER to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = false,
                     setGroupManagement = false, getGroupType = true,
@@ -174,8 +174,8 @@ object GroupPermissionManager {
                     transferOwner = false, dismissGroup = false, reportGroup = true
                 )
             ),
-            V2TIMManager.GROUP_TYPE_AVCHATROOM to mapOf(
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_OWNER to createPermissionMap(
+            GroupType.AV_CHAT_ROOM to mapOf(
+                GroupMemberRole.OWNER to createPermissionMap(
                     setGroupName = true, setGroupAvatar = true, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = true,
                     setGroupManagement = true, getGroupType = true,
@@ -186,7 +186,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = false,
                     transferOwner = false, dismissGroup = true, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_ADMIN to createPermissionMap(
+                GroupMemberRole.ADMIN to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = false,
                     setGroupManagement = false, getGroupType = true,
@@ -197,7 +197,7 @@ object GroupPermissionManager {
                     clearHistoryMessages = true, deleteAndQuit = true,
                     transferOwner = false, dismissGroup = false, reportGroup = true
                 ),
-                V2TIMGroupMemberFullInfo.V2TIM_GROUP_MEMBER_ROLE_MEMBER to createPermissionMap(
+                GroupMemberRole.MEMBER to createPermissionMap(
                     setGroupName = false, setGroupAvatar = false, sendMessage = true,
                     setDoNotDisturb = true, pinGroup = true, setGroupNotice = false,
                     setGroupManagement = false, getGroupType = true,
@@ -250,8 +250,8 @@ object GroupPermissionManager {
     }
 
     fun canPerformAction(
-        groupType: String,
-        memberRole: Int,
+        groupType: GroupType,
+        memberRole: GroupMemberRole,
         action: GroupPermission
     ): Boolean {
         return permissionMatrix[groupType]?.get(memberRole)?.get(action) == true

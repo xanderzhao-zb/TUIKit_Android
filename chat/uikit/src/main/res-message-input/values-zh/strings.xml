@@ -27,8 +27,6 @@
     <string name="message_input_voice_transcription_empty">未识别到文字内容</string>
     <string name="message_input_audio_too_short">语音录制时长太短</string>
     <string name="message_input_audio_time_limit_reached">语音录制时长达到上限</string>
-    <string name="message_input_record_audio_permission_title">需要麦克风权限</string>
-    <string name="message_input_record_audio_permission_desc">用于录制并发送语音消息。</string>
     <string name="message_input_record_audio_permission_settings_tip">请在系统设置中开启麦克风权限。</string>
     <string name="message_input_minimal_hint">输入消息</string>
     <string name="message_input_send">发送</string>
