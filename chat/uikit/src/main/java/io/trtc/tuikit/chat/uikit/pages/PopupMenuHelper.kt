@@ -98,12 +98,7 @@ class PopupMenuHelper(private val context: Context) {
 
         val popupW = contentW + shadowPadH * 2
 
-        val isRtl = anchor.layoutDirection == View.LAYOUT_DIRECTION_RTL
-        val preferredX = if (isRtl) {
-            screenMargin - shadowPadH
-        } else {
-            screenWidth - contentW - shadowPadH - screenMargin
-        }
+        val preferredX = (anchorCenterX - shadowPadH - contentW / 2f).toInt()
         val maxX = (screenWidth - popupW - screenMargin).coerceAtLeast(screenMargin)
         val popupX = preferredX.coerceIn(screenMargin, maxX)
 
@@ -387,8 +382,8 @@ class PopupMenuHelper(private val context: Context) {
 
         private fun createBubbleWithArrowPath(): Path {
             val arrowHalfWidth = arrowWidth / 2f
-            val minCenter = bubbleRect.left + cornerRadius
-            val maxCenter = bubbleRect.right - cornerRadius
+            val minCenter = bubbleRect.left + cornerRadius + arrowHalfWidth
+            val maxCenter = bubbleRect.right - cornerRadius - arrowHalfWidth
             val centerX = arrowCenterXInBubble.coerceIn(minCenter, maxCenter)
             val tipY = if (isArrowOnTop) {
                 bubbleRect.top - arrowHeightPx

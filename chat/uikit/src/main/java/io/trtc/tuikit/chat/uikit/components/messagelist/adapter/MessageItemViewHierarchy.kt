@@ -230,15 +230,22 @@ internal fun MessageItemView.buildMessageItemViewHierarchy(
         )
     )
     val screenWidth = context.resources.displayMetrics.widthPixels
+    val isAvatarVisible = config.isShowLeftAvatar || config.isShowRightAvatar
+    val avatarAreaPx = MessageItemDisplayPolicy.resolveAvatarAreaPx(
+        avatarSpacingDp = config.avatarSpacing,
+        density = density
+    )
     val maxRowWidth = MessageItemDisplayPolicy.resolveMaxRowWidth(
         screenWidth = screenWidth,
         horizontalPaddingDp = config.horizontalPadding,
         avatarSpacingDp = config.avatarSpacing,
-        density = density
+        density = density,
+        isAvatarVisible = isAvatarVisible
     )
     val maxBubbleWidth = MessageItemDisplayPolicy.resolvePreferredBubbleMaxWidth(
         screenWidth = screenWidth,
         maxRowWidth = maxRowWidth,
+        extraWidth = if (isAvatarVisible) 0 else avatarAreaPx,
         fillAvailableWidth = fillAvailableWidth
     )
     bubbleRow.maxWidth = maxRowWidth

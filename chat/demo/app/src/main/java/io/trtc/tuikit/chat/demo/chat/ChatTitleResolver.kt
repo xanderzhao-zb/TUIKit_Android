@@ -5,7 +5,9 @@ internal object ChatTitleResolver {
         conversationTitle: String? = null,
         conversationID: String
     ): String {
-        return conversationTitle.takeUnless { it.isNullOrBlank() }
-            ?: conversationID
+        val catalogName = io.trtc.tuikit.chat.demo.ai.SupportAgentCatalog
+            .displayNameForConversation(conversationID)
+        val fallback = catalogName ?: conversationID
+        return conversationTitle.takeUnless { it.isNullOrBlank() } ?: fallback
     }
 }

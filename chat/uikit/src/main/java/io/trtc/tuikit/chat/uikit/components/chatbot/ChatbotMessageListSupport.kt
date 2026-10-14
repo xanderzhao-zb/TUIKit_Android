@@ -22,8 +22,23 @@ internal object ChatbotMessageSummaryPolicy {
     }
 }
 
+/**
+ * 「AI 正在输入」气泡的数据源。
+ *
+ * 造出来的 [MessageInfo] 只活在展示列表里：不调 insertMessageToLocalStorage、不进本地库、
+ * 不参与登录同步，进程一死就没了。这是它和真正插一条本地消息的根本区别——后者会在卸载重装时
+ * 被同步通道重放成永远转圈的残骸，而这条不可能被重放。
+ *
+ * 复用 chatbotPlugin 的 FLOW 结构是为了直接落到 [ChatbotMessageRenderer] 的加载态分支上，
+ * 不用再为它单独做一套 viewType；`localPlaceholder` 标记让渲染和长按菜单能把它和真实回复区分开。
+ */
 internal object ChatbotPlaceholderMessageFactory {
     private const val MESSAGE_ID_PREFIX = "chatbot_placeholder_"
+
+    /** 从最近一条对端消息上取头像昵称，让占位气泡和随后真正的回复长得一样。 */
+    fun resolveSender(messages: List<MessageInfo>): MessageSenderInfo? {
+        return messages.firstOrNull { !it.isSentBySelf }?.from
+    }
 
     fun create(
         conversationID: String,
@@ -38,11 +53,6 @@ internal object ChatbotPlaceholderMessageFactory {
             userID = targetID,
             nickname = targetID
         )
-        val conversationType = when {
-            ConversationIDUtil.isC2C(conversationID) -> ConversationType.C2C
-            ConversationIDUtil.isGroup(conversationID) -> ConversationType.GROUP
-            else -> ConversationType.UNKNOWN
-        }
         val customData = JsonObject().apply {
             addProperty("chatbotPlugin", ChatbotMessageProtocol.PLUGIN_VALUE)
             addProperty("src", ChatbotMessageProtocol.SOURCE_FLOW)
@@ -58,7 +68,11 @@ internal object ChatbotPlaceholderMessageFactory {
             from = resolvedSender,
             to = targetID,
             isSentBySelf = false,
-            conversationType = conversationType,
+            conversationType = when {
+                ConversationIDUtil.isC2C(conversationID) -> ConversationType.C2C
+                ConversationIDUtil.isGroup(conversationID) -> ConversationType.GROUP
+                else -> ConversationType.UNKNOWN
+            },
             messageType = MessageType.CUSTOM,
             messagePayload = CustomMessagePayload(customData = customData),
             needReadReceipt = false

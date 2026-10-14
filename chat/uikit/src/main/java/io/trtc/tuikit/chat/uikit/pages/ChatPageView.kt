@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.uikit.pages
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.View
 import android.widget.FrameLayout
 import io.trtc.tuikit.chat.uikit.components.common.ConversationIDUtil
 import io.trtc.tuikit.chat.uikit.components.chatbot.ChatbotConversationController
@@ -38,6 +39,7 @@ class ChatPageView @JvmOverloads constructor(
 
     private val messageListView: MessageListView
     private val messageInputView: MessageInputView
+    private val footerOverlay: FrameLayout
 
     private val themeStore = ThemeStore.shared(context)
     private var viewScope: CoroutineScope? = null
@@ -56,6 +58,12 @@ class ChatPageView @JvmOverloads constructor(
         LayoutInflater.from(context).inflate(R.layout.uikit_page_chat, this, true)
         messageListView = findViewById(R.id.uikit_message_list_view)
         messageInputView = findViewById(R.id.uikit_message_input_view)
+        footerOverlay = findViewById(R.id.uikit_message_list_footer_overlay)
+        footerOverlay.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) {
+                post { updateMessageListBottomInset() }
+            }
+        }
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
     }
 
@@ -189,6 +197,33 @@ class ChatPageView @JvmOverloads constructor(
                 typingStatusSender = null
             )
         }
+    }
+
+    fun setMessageListFooterOverlay(view: View?) {
+        footerOverlay.removeAllViews()
+        if (view != null) {
+            footerOverlay.addView(view)
+        }
+        updateMessageListBottomInset()
+    }
+
+    fun setOnTextMessageSentListener(listener: (() -> Unit)?) {
+        messageInputView.setOnTextMessageSentListener(listener)
+    }
+
+    fun setMessageListFooterOverlayVisible(visible: Boolean) {
+        footerOverlay.visibility = if (visible) VISIBLE else GONE
+        updateMessageListBottomInset()
+    }
+
+    private fun updateMessageListBottomInset() {
+        val isOccupied = footerOverlay.visibility == VISIBLE && footerOverlay.childCount > 0
+        val inset = if (isOccupied) {
+            footerOverlay.height + (footerOverlay.layoutParams as MarginLayoutParams).bottomMargin
+        } else {
+            0
+        }
+        messageListView.setContentBottomInset(inset)
     }
 
     fun exitMultiSelectMode() {

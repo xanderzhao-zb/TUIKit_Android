@@ -9,6 +9,7 @@ import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.File
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.ImageMessageRenderer
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.MergeMessageRenderer
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.SoundMessageRenderer
+import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.StreamMessageRenderer
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.SystemMessageRenderer
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.TextMessageRenderer
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.VideoMessageRenderer
@@ -134,7 +135,8 @@ internal class MessageRendererResolver(
             MessageType.AUDIO to SoundMessageRenderer(),
             MessageType.FACE to FaceMessageRenderer(),
             MessageType.TIPS to systemMessageRenderer,
-            MessageType.MERGED to MergeMessageRenderer()
+            MessageType.MERGED to MergeMessageRenderer(),
+            MessageType.STREAM to StreamMessageRenderer()
         )
         private val customBusinessRenderers = mapOf(
             "group_create" to CreateGroupMessageRenderer()

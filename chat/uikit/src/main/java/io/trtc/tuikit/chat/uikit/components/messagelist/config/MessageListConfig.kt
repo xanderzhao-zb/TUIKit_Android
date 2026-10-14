@@ -52,6 +52,13 @@ interface MessageListConfigProtocol {
     val messageExclusionMatchers: List<MessageMatcher>
         get() = emptyList()
 
+    /**
+     * 机器人会话里，用户发出文本后是否在列表最新端显示「正在输入」占位，直到机器人回复到达。
+     * 会话可能由人工客服接手时应关闭，否则占位会一直等到超时。
+     */
+    val enableChatbotReplyPlaceholder: Boolean
+        get() = true
+
     val actionCustomizer: MessageActionCustomizer?
         get() = null
 }
@@ -357,6 +364,11 @@ class ChatMessageListConfig : MessageListConfigProtocol {
 
     override val messageExclusionMatchers: List<MessageMatcher>
         get() = _messageExclusionMatchers.toList()
+
+    private var _enableChatbotReplyPlaceholder: Boolean = true
+
+    override val enableChatbotReplyPlaceholder: Boolean
+        get() = _enableChatbotReplyPlaceholder
 
     internal val customRenderRules: List<MessageRenderRule>
         get() = _customRenderRules.toList()
@@ -740,6 +752,11 @@ class ChatMessageListConfig : MessageListConfigProtocol {
 
     fun clearMessageExclusions(): ChatMessageListConfig {
         _messageExclusionMatchers.clear()
+        return this
+    }
+
+    fun setEnableChatbotReplyPlaceholder(enable: Boolean): ChatMessageListConfig {
+        _enableChatbotReplyPlaceholder = enable
         return this
     }
 

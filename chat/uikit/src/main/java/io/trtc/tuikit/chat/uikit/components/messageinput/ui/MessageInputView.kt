@@ -61,6 +61,7 @@ class MessageInputView @JvmOverloads constructor(
 ) : LinearLayout(context, attrs, defStyleAttr), PanelHeightProvider {
 
     private var viewScope: CoroutineScope? = null
+    private var onTextMessageSent: () -> Unit = {}
     private var viewModel: MessageInputViewModel? = null
     private var draftCollectorJob: kotlinx.coroutines.Job? = null
     private var chatbotStateJob: Job? = null
@@ -149,6 +150,10 @@ class MessageInputView @JvmOverloads constructor(
         )
     }
 
+    fun setOnTextMessageSentListener(listener: (() -> Unit)?) {
+        onTextMessageSent = listener ?: {}
+    }
+
     internal fun setupWithChatbot(
         conversationID: String,
         config: MessageInputConfigProtocol,
@@ -208,8 +213,13 @@ class MessageInputView @JvmOverloads constructor(
                 conversationID = conversationID,
                 messageInputConfig = config
             ).setTextSendCallbacks(
-                canSend = { chatbotController?.isActive != true },
-                onSent = { chatbotController?.onTextMessageSent() }
+                // 只有真有一条能打断的流式回复在跑时才拦发送。等待态不拦：那条路径上
+                // 用户看到的是列表里的「正在输入」气泡，输入栏是好的，点了必须真能发出去。
+                canSend = { chatbotController?.canInterrupt != true },
+                onSent = {
+                    chatbotController?.onTextMessageSent()
+                    onTextMessageSent()
+                }
             )
         ).get(viewModelKey, MessageInputViewModel::class.java)
     }
@@ -561,7 +571,7 @@ class MessageInputView @JvmOverloads constructor(
             hasText = hasText,
             isTextMode = isTextMode,
             isShowMore = config.isShowMore,
-            isChatbotActive = chatbotController?.isActive == true,
+            isChatbotInterruptible = chatbotController?.canInterrupt == true,
             keepSendVisible = config.keepSendButtonVisible
         )
         btnMore.visibility = if (visibility.showMore) View.VISIBLE else View.GONE
@@ -645,7 +655,8 @@ class MessageInputView @JvmOverloads constructor(
             config = AudioRecorderViewConfig(
                 minDurationMs = AUDIO_MIN_RECORD_TIME,
                 maxDurationMs = this@MessageInputView.config.audioMaxRecordDurationMs
-                    .coerceAtLeast(AUDIO_MIN_RECORD_TIME)
+                    .coerceAtLeast(AUDIO_MIN_RECORD_TIME),
+                enableRealtimeVoiceToText = this@MessageInputView.config.enableRealtimeVoiceToText
             )
         }
         panelContainer = findViewById(R.id.message_input_panel_container)
@@ -659,7 +670,9 @@ class MessageInputView @JvmOverloads constructor(
             updateSendButtonVisibility = { state -> updateSendButtonVisibility(state) },
             clearQuote = { coordinator.dispatch(OverlayEvent.ClearQuote) },
             onMentionTrigger = { mentionController.showMentionMemberDialog() },
-            onTypingContentChanged = { isTyping -> typingStatusSender?.invoke(isTyping) },
+            onTypingContentChanged = { isTyping ->
+                typingStatusSender?.invoke(isTyping)
+            },
             initialInputText = previousInputText
         )
         mentionController = MessageInputMentionController(
@@ -703,8 +716,11 @@ class MessageInputView @JvmOverloads constructor(
             viewModelProvider = { viewModel },
             isLongPressToTalkEnabled = { config.enableLongPressToTalk },
             sendCurrentText = { textController.sendCurrentText(onSubmitted = ::handleTextSubmitted) },
-            showVoiceTranscriptionDraft = { audioPath, duration, text ->
-                showVoiceTranscriptionDraft(audioPath, duration, text)
+            openVoiceTranscriptionDraft = { audioPath, duration, initialText ->
+                openVoiceTranscriptionDraft(audioPath, duration, initialText)
+            },
+            updateVoiceTranscriptionDraft = { audioPath, text ->
+                updateVoiceTranscriptionDraft(audioPath, text)
             },
             logDebug = { message -> Log.d(TAG, message) }
         )
@@ -762,17 +778,19 @@ class MessageInputView @JvmOverloads constructor(
         }
     }
 
-    private fun showVoiceTranscriptionDraft(audioPath: String, audioDurationSecond: Int, text: String?) {
-        if (text != null && voiceTranscriptionAudioPath != audioPath) {
-            return
-        }
-        voiceTranscriptionOverlay?.let { overlay ->
-            if (voiceTranscriptionAudioPath == audioPath) {
-                overlay.updateResult(text)
-            }
-            return
-        }
-        if (text != null) {
+    /**
+     * 松手转文字：把草稿浮层铺出来。
+     *
+     * [initialText] 有值时浮层直接铺成可编辑的最终形态，省掉一轮「三个点 → 文本」切换，
+     * 以及它带来的气泡高度、位置跳动。为空表示文本还没到（实时识别没跑起来、或回落到
+     * 上传整段音频），这时才显示识别中，等 [updateVoiceTranscriptionDraft] 来填。
+     */
+    private fun openVoiceTranscriptionDraft(
+        audioPath: String,
+        audioDurationSecond: Int,
+        initialText: String?,
+    ) {
+        if (voiceTranscriptionOverlay != null) {
             return
         }
         voiceTranscriptionAudioPath = audioPath
@@ -782,7 +800,7 @@ class MessageInputView @JvmOverloads constructor(
             anchorView = this,
             audioPath = audioPath,
             audioDurationSecond = audioDurationSecond,
-            text = text,
+            text = initialText,
             onCancel = {
                 clearVoiceTranscriptionOverlayState()
             },
@@ -821,7 +839,20 @@ class MessageInputView @JvmOverloads constructor(
             onStopSpeak = {
                 viewModel?.stopRecordTranslationSpeak()
             },
+            allowSendOriginalVoice = config.enableSendRecordedVoice,
         ).also { it.show() }
+    }
+
+    /**
+     * 识别结果到了，填进已经铺开的草稿浮层。
+     *
+     * 浮层已经关掉、或这期间又录了另一条语音时丢弃——迟到的结果不该盖到新的录音上。
+     */
+    private fun updateVoiceTranscriptionDraft(audioPath: String, text: String?) {
+        if (voiceTranscriptionAudioPath != audioPath) {
+            return
+        }
+        voiceTranscriptionOverlay?.updateResult(text)
     }
 
     private fun pauseKeyboardBridgeForVoiceTranscriptionOverlay() {
@@ -882,7 +913,9 @@ class MessageInputView @JvmOverloads constructor(
         spaceAfterEmoji.visibility = btnEmoji.visibility
         btnPressToTalk.config = btnPressToTalk.config.copy(
             minDurationMs = AUDIO_MIN_RECORD_TIME,
-            maxDurationMs = config.audioMaxRecordDurationMs.coerceAtLeast(AUDIO_MIN_RECORD_TIME)
+            maxDurationMs = config.audioMaxRecordDurationMs.coerceAtLeast(AUDIO_MIN_RECORD_TIME),
+            enableRealtimeVoiceToText = config.enableRealtimeVoiceToText,
+            enableReleaseToSendVoice = config.enableSendRecordedVoice,
         )
         updateColors(
             lastColors ?: ThemeStore.shared(context).themeState.value.currentTheme.tokens.color
@@ -893,7 +926,7 @@ class MessageInputView @JvmOverloads constructor(
         }
         if (::coordinator.isInitialized) {
             updateSendButtonVisibility(coordinator.state.value)
-        } else if (chatbotController?.isActive == true) {
+        } else if (chatbotController?.canInterrupt == true) {
             btnMore.visibility = View.GONE
             btnSend.visibility = View.GONE
             btnChatbotStop.visibility = View.VISIBLE

@@ -25,10 +25,12 @@ import io.trtc.tuikit.chat.uikit.components.emojipicker.EmojiSpanHelper
 import io.trtc.tuikit.chat.uikit.components.filepicker.FilePicker
 import io.trtc.tuikit.chat.uikit.components.filepicker.FilePickerListener
 import io.trtc.tuikit.chat.uikit.components.messageinput.albumpicker.AlbumPickerMediaSendCoordinator
+import io.trtc.tuikit.chat.uikit.components.messageinput.asr.AsrServiceError
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInputConfig
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.MessageInputConfigProtocol
 import io.trtc.tuikit.chat.uikit.components.messageinput.data.MessageInputMenuAction
 import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionInfo
+import io.trtc.tuikit.chat.uikit.components.messageinput.ui.AsrServiceUnavailableDialog
 import io.trtc.tuikit.chat.uikit.components.messageinput.ui.GroupMemberPickerDialog
 import io.trtc.tuikit.chat.uikit.components.messageinput.utils.VideoFrameExtractor
 import io.trtc.tuikit.chat.uikit.components.videorecorder.RecordMode
@@ -555,7 +557,7 @@ class MessageInputViewModel(
             filePath = filePath,
             onFailure = { code, desc ->
                 Log.e(TAG, "convert local audio to text failed, code: $code, desc: $desc")
-                showConvertVoiceToTextFailed(context)
+                showConvertVoiceToTextFailed(context, code)
             },
             onCompleted = { text -> runOnMain { onCompleted(text) } }
         )
@@ -629,8 +631,19 @@ class MessageInputViewModel(
         )
     }
 
-    private fun showConvertVoiceToTextFailed(context: Context) {
-        showErrorOnMain(context, context.getString(R.string.message_input_convert_to_text_failed))
+    private fun showConvertVoiceToTextFailed(context: Context, code: Int? = null) {
+        runOnMain {
+            if (code != null && AsrServiceError.isServiceUnavailable(code) &&
+                AsrServiceUnavailableDialog.showOnce(context)
+            ) {
+                return@runOnMain
+            }
+            AtomicToast.show(
+                context,
+                context.getString(R.string.message_input_convert_to_text_failed),
+                style = AtomicToast.Style.ERROR,
+            )
+        }
     }
 
     private fun showErrorOnMain(context: Context, message: String) {

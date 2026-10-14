@@ -28,6 +28,7 @@ import io.trtc.tuikit.chat.uikit.components.conversationlist.adapter.Conversatio
 import io.trtc.tuikit.chat.uikit.components.conversationlist.adapter.ConversationListAdapter
 import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ChatConversationActionConfig
 import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ConversationActionConfigProtocol
+import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ConversationMatcher
 import io.trtc.tuikit.chat.uikit.components.common.findViewModelStoreOwner
 import io.trtc.tuikit.chat.uikit.components.conversationlist.model.ConversationActionIDs
 import io.trtc.tuikit.chat.uikit.components.conversationlist.model.ConversationCustomActionContext
@@ -87,9 +88,14 @@ class ConversationListView @JvmOverloads constructor(
             ?.supportsChangeAnimations = false
     }
 
+    /**
+     * @param conversationExclusion 命中的会话不在列表里显示，为 null 时全部显示。
+     * 隐藏的会话仍会计入总未读数。
+     */
     @JvmOverloads
     fun setup(
         config: ConversationActionConfigProtocol = ChatConversationActionConfig(),
+        conversationExclusion: ConversationMatcher? = null,
         onConversationClick: (ConversationInfo) -> Unit = {}
     ) {
         this.config = config
@@ -104,6 +110,7 @@ class ConversationListView @JvmOverloads constructor(
             ConversationListViewModelFactory(ConversationListStore.create(), config)
         ).get(viewModelKey, ConversationListViewModel::class.java)
         viewModel.updateConfig(config)
+        viewModel.updateConversationExclusion(conversationExclusion)
 
         adapter = ConversationListAdapter(
             context = context,

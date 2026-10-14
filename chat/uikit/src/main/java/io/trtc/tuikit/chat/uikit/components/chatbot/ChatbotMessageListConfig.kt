@@ -62,5 +62,7 @@ internal class ChatbotMessageListConfig(
     override val enableTyping: Boolean = false
     override val messageExclusionMatchers: List<MessageMatcher>
         get() = delegateConfig.messageExclusionMatchers
+    override val enableChatbotReplyPlaceholder: Boolean
+        get() = delegateConfig.enableChatbotReplyPlaceholder
     override val actionCustomizer: MessageActionCustomizer? = null
 }

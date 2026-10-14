@@ -17,7 +17,6 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
 import io.trtc.tuikit.chat.demo.customerservice.CustomerServiceManager
 import io.trtc.tuikit.chat.demo.login.LocalLoginActivity
-import io.trtc.tuikit.chat.uikit.components.messagelist.utils.MessageListMessageSummaryRegistry
 
 class Application : Application() {
 
@@ -40,7 +39,10 @@ class Application : Application() {
         MMKV.defaultMMKV().decodeBool(AppConstants.KEY_ENABLE_READ_RECEIPT, false).also {
             AppBuilderConfig.enableReadReceipt = it
         }
-
+        if (!MMKV.defaultMMKV().decodeBool(AppConstants.KEY_CALLS_TAB_DEFAULT_OFF_MIGRATED, false)) {
+            MMKV.defaultMMKV().encode(AppConstants.KEY_SHOW_CALLS_TAB, false)
+            MMKV.defaultMMKV().encode(AppConstants.KEY_CALLS_TAB_DEFAULT_OFF_MIGRATED, true)
+        }
 
         CustomLinkMessageManager.registerMessageSummary()
         CustomerServiceManager.registerSummary()

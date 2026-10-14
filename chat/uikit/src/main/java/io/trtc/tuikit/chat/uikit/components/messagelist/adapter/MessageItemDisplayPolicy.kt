@@ -15,26 +15,37 @@ internal object MessageItemDisplayPolicy {
         }
     }
 
+    fun resolveAvatarAreaPx(avatarSpacingDp: Int, density: Float): Int {
+        return ((MESSAGE_AVATAR_SIZE_DP + avatarSpacingDp) * density).toInt()
+    }
+
     fun resolveMaxRowWidth(
         screenWidth: Int,
         horizontalPaddingDp: Int,
         avatarSpacingDp: Int,
-        density: Float
+        density: Float,
+        isAvatarVisible: Boolean = true
     ): Int {
         val horizontalPad = (horizontalPaddingDp * density).toInt() * 2
-        val avatarArea = ((MESSAGE_AVATAR_SIZE_DP + avatarSpacingDp) * density).toInt()
+        val avatarArea = if (isAvatarVisible) {
+            resolveAvatarAreaPx(avatarSpacingDp, density)
+        } else {
+            0
+        }
         return (screenWidth - horizontalPad - avatarArea).coerceAtLeast(0)
     }
 
     fun resolvePreferredBubbleMaxWidth(
         screenWidth: Int,
         maxRowWidth: Int,
+        extraWidth: Int = 0,
         fillAvailableWidth: Boolean = false
     ): Int {
         if (fillAvailableWidth) {
             return maxRowWidth.coerceAtLeast(0)
         }
-        val upperBound = (screenWidth * BUBBLE_SCREEN_WIDTH_RATIO).toInt()
+        // 关掉头像时把原先留给头像的宽度加回气泡上限，否则仍被 72% 屏幕宽卡住
+        val upperBound = (screenWidth * BUBBLE_SCREEN_WIDTH_RATIO).toInt() + extraWidth.coerceAtLeast(0)
         return minOf(maxRowWidth, upperBound).coerceAtLeast(0)
     }
 

@@ -1,5 +1,6 @@
 package io.trtc.tuikit.chat.uikit.components.messagelist.viewmodel
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -66,6 +67,8 @@ import io.trtc.tuikit.atomicxcore.api.message.TextMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.VideoMessagePayload
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -99,13 +102,21 @@ class MessageListViewModel(
 ) : ViewModel() {
     companion object {
         private const val TAG = "MessageListViewModel"
+        private const val MAX_SYNC_REPAIR_ATTEMPTS = 3
+        private const val SYNC_REPAIR_SETTLE_MS = 600L
+        private const val SYNC_REPAIR_WINDOW_MS = 30_000L
+        private const val SYNC_REPAIR_HOLD_TIMEOUT_MS = 5_000L
     }
     private val conversationListStore = ConversationListStore.create()
     val conversationListState = conversationListStore.state
     val messageListState = messageListStore.state
+    /** 正在遮挡被登录同步污染的列表，此间到达的消息不会出现在 [messageList] 里。 */
+    private val holdingDirtyMessageList = MutableStateFlow(false)
     val messageEvent = messageListStore.messageEventFlow.filter { event ->
         when (event) {
-            is MessageEvent.OnReceiveNewMessage -> !TypingMessageProtocol.isTypingMessage(event.message)
+            // 遮挡期间列表里看不到这条消息，放行会让滚动定位指向 adapter 中不存在的目标
+            is MessageEvent.OnReceiveNewMessage ->
+                !TypingMessageProtocol.isTypingMessage(event.message) && !holdingDirtyMessageList.value
         }
     }
     private val messageInputStore = MessageInputStore.create(conversationID)
@@ -113,6 +124,13 @@ class MessageListViewModel(
     private val visibilityPolicy = MessageListVisibilityPolicy(messageListConfig)
     private val displayMapper = MessageListDisplayMapper(shouldDisplayMessage = ::shouldDisplayMessage)
     private val timeGroupingPolicy = MessageListTimeGroupingPolicy()
+    private val syncRepairPolicy = MessageListSyncRepairPolicy()
+    private val createdAtMs = SystemClock.elapsedRealtime()
+    private val syncRepairHoldReleased = MutableStateFlow(false)
+    private var lastCleanMessages: List<MessageInfo> = emptyList()
+    private var syncRepairAttempts = 0
+    private var syncRepairJob: Job? = null
+    private var syncRepairHoldTimeoutJob: Job? = null
     private val resourceCoordinator = MessageResourceCoordinator { message, resourceType, completion ->
         downloadMessageMedia(
             message,
@@ -151,7 +169,7 @@ class MessageListViewModel(
     }
     private val hiddenResendingMessageIds = MutableStateFlow<Set<String>>(emptySet())
 
-    val messageList: StateFlow<List<MessageInfo>> = combine(
+    private val rawMessageList: StateFlow<List<MessageInfo>> = combine(
         messageListState.messageList,
         AlbumPickerProcessingMessageStore.messagesByConversation,
         hiddenResendingMessageIds
@@ -175,6 +193,29 @@ class MessageListViewModel(
             message.msgID in hiddenMessageIds
         }
         displayMapper.map(visibleMessages)
+    }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    /**
+     * 对外暴露的列表。被登录同步污染期间不把脏数据放出去，继续吐上一份干净快照，
+     * 避免界面先闪一批加载中的气泡再被重拉刷新。修复放弃后解除遮挡，回到真实数据。
+     */
+    val messageList: StateFlow<List<MessageInfo>> = combine(
+        rawMessageList,
+        syncRepairHoldReleased
+    ) { messages, released ->
+        val corrupted = !released && syncRepairPolicy.isCorrupted(messages)
+        holdingDirtyMessageList.value = corrupted
+        if (corrupted) {
+            lastCleanMessages
+        } else {
+            lastCleanMessages = messages
+            messages
+        }
     }
         .stateIn(
             scope = viewModelScope,
@@ -275,7 +316,11 @@ class MessageListViewModel(
                 syncPendingAuxiliaryTextProcessing(messages)
             }
         }
-
+        viewModelScope.launch {
+            rawMessageList.collect { messages ->
+                scheduleSyncRepairIfNeeded(messages)
+            }
+        }
         conversationListStore.getConversationInfo(conversationID, object : GetConversationInfoCompletionHandler {
             override fun onSuccess(conversationInfo: ConversationInfo) {}
             override fun onFailure(code: Int, desc: String) {}
@@ -312,6 +357,48 @@ class MessageListViewModel(
 
     fun loadMoreNewerMessage(completion: CompletionHandler? = null) {
         loadMoreMessages(MessageLoadDirection.NEWER, completion)
+    }
+
+    /**
+     * 登录同步会把历史消息经由新消息通道重放，污染列表顺序并让流式消息卡在加载态。
+     * 命中污染特征后等列表不再变化，再用历史接口重拉首屏覆盖掉。
+     *
+     * 每次列表变动都会重置延时，所以重拉一定发生在重放结束之后，不依赖同步完成回调的时机。
+     * 修复期间 [messageList] 会遮住脏数据，因此这里必须盯着未经遮挡的 [rawMessageList]。
+     */
+    private fun scheduleSyncRepairIfNeeded(messages: List<MessageInfo>) {
+        if (syncRepairHoldReleased.value) return
+        if (!syncRepairPolicy.isCorrupted(messages)) return
+
+        val exhausted = syncRepairAttempts >= MAX_SYNC_REPAIR_ATTEMPTS ||
+            SystemClock.elapsedRealtime() - createdAtMs > SYNC_REPAIR_WINDOW_MS
+        if (exhausted) {
+            releaseSyncRepairHold()
+            return
+        }
+
+        startSyncRepairHoldTimeout()
+        syncRepairJob?.cancel()
+        syncRepairJob = viewModelScope.launch {
+            delay(SYNC_REPAIR_SETTLE_MS)
+            syncRepairAttempts++
+            reloadLatestMessages()
+        }
+    }
+
+    /** 兜底：无论修复结果如何，都不允许长时间遮着不放。 */
+    private fun startSyncRepairHoldTimeout() {
+        if (syncRepairHoldTimeoutJob != null) return
+        syncRepairHoldTimeoutJob = viewModelScope.launch {
+            delay(SYNC_REPAIR_HOLD_TIMEOUT_MS)
+            releaseSyncRepairHold()
+        }
+    }
+
+    private fun releaseSyncRepairHold() {
+        syncRepairJob?.cancel()
+        syncRepairHoldTimeoutJob?.cancel()
+        syncRepairHoldReleased.value = true
     }
 
     fun reloadLatestMessages(completion: CompletionHandler? = null) {
