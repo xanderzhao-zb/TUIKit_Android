@@ -20,10 +20,15 @@
     <string name="message_input_release_cancel_hint">حرر للإلغاء</string>
     <string name="message_input_swipe_cancel_hint">اسحب خارج الزر للإلغاء</string>
     <string name="message_input_release_send_hint">حرر للإرسال</string>
+    <string name="message_input_slide_to_transcribe_hint">اسحب للتحويل إلى نص</string>
     <string name="message_input_release_transcribe_hint">حرر للتحويل إلى نص</string>
     <string name="message_input_transcribe_to_text">إلى نص</string>
+    <string name="message_input_realtime_transcribing">جارٍ الاستماع…</string>
     <string name="message_input_auto_stop_countdown">سيتوقف التسجيل بعد %1$d ث</string>
     <string name="message_input_convert_to_text_failed">فشل التحويل إلى نص</string>
+    <string name="message_input_asr_unavailable_title">التعرف على الكلام غير متاح</string>
+    <string name="message_input_asr_unavailable_content">نفدت حزمة التعرف على الكلام لهذا التطبيق أو لم يتم تفعيلها، لذا فإن تحويل الصوت إلى نص غير متاح مؤقتًا.</string>
+    <string name="message_input_asr_unavailable_confirm">حسنًا</string>
     <string name="message_input_send_original_voice">إرسال الصوت</string>
     <string name="message_input_voice_transcription_empty">لم يتم التعرف على أي نص</string>
     <string name="message_input_audio_too_short">مدة التسجيل الصوتي قصيرة جدًا</string>

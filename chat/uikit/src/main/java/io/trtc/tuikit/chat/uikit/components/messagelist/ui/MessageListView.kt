@@ -24,11 +24,7 @@ import io.trtc.tuikit.chat.uikit.components.common.EventBus
 import io.trtc.tuikit.chat.uikit.components.common.findLifecycleOwner
 import io.trtc.tuikit.chat.uikit.components.common.onEvent
 import io.trtc.tuikit.chat.uikit.components.chatbot.ChatbotConversationController
-import io.trtc.tuikit.chat.uikit.components.chatbot.ChatbotConversationState
-import io.trtc.tuikit.chat.uikit.components.chatbot.ChatbotConversationPolicy
 import io.trtc.tuikit.chat.uikit.components.chatbot.ChatbotForwardTargetPolicy
-import io.trtc.tuikit.chat.uikit.components.chatbot.ChatbotMessageProtocol
-import io.trtc.tuikit.chat.uikit.components.chatbot.ChatbotMessageSource
 import io.trtc.tuikit.chat.uikit.components.chatbot.ChatbotPlaceholderMessageFactory
 import io.trtc.tuikit.chat.uikit.components.messagelist.background.MessageListBackgroundView
 import io.trtc.tuikit.chat.uikit.components.messagelist.background.MmkvChatBackgroundStore
@@ -69,7 +65,6 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageForwardType
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageListStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageQuoteInfo
-import io.trtc.tuikit.atomicxcore.api.message.MessageSenderInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -115,6 +110,12 @@ class MessageListView @JvmOverloads constructor(
         if (::viewModel.isInitialized) {
             viewModel.exitMultiSelectMode()
         }
+    }
+
+    /** Space kept below the newest message so views floating over the list bottom don't cover it. */
+    fun setContentBottomInset(inset: Int) {
+        if (recyclerView.paddingBottom == inset) return
+        recyclerView.setPadding(recyclerView.paddingLeft, recyclerView.paddingTop, recyclerView.paddingRight, inset)
     }
 
     fun isInMultiSelectMode(): Boolean {
@@ -477,31 +478,12 @@ class MessageListView @JvmOverloads constructor(
             }
         }
 
-        val displayedMessages = if (activeChatbotController == null) {
-            viewModel.messageList
-        } else {
-            combine(
-                viewModel.messageList,
-                activeChatbotController.state
-            ) { list, state ->
-                val sourceMessages = viewModel.messageListState.messageList.value
-                if (state is ChatbotConversationState.Waiting &&
-                    activeChatbotController.shouldShowPlaceholder(sourceMessages)
-                ) {
-                    listOf(
-                        ChatbotPlaceholderMessageFactory.create(
-                            conversationID = activeChatbotController.conversationID,
-                            timestampSeconds = state.requestTimestampSeconds,
-                            sender = resolveChatbotPlaceholderSender(
-                                sourceMessages,
-                                activeChatbotController.conversationID
-                            )
-                        )
-                    ) + list
-                } else {
-                    list
-                }
+        val displayedMessages = if (activeChatbotController != null && config.enableChatbotReplyPlaceholder) {
+            combine(viewModel.messageList, activeChatbotController.state) { messages, _ ->
+                withChatbotPlaceholder(messages, activeChatbotController)
             }
+        } else {
+            viewModel.messageList
         }
 
         scope.launch {
@@ -616,6 +598,8 @@ class MessageListView @JvmOverloads constructor(
                 when (event) {
                     is MessageEvent.OnReceiveNewMessage -> {
                         scheduleDebouncedUnreadClear()
+                        // 最新那条是超长 AI 回复时，「整条完全可见」不成立；
+                        // isAtLatestPosition 内部改看是否滚到列表底部。
                         if (isAtLatestPosition()) {
                             locateCoordinator.requestScrollToLatestMessage(event.message.msgID)
                         } else {
@@ -929,6 +913,27 @@ class MessageListView @JvmOverloads constructor(
             retainHasMoreNewerUntilLatestReload
     }
 
+    /**
+     * 等待机器人回复期间，在列表最新端补一条「AI 正在输入」气泡。
+     *
+     * 这条消息只存在于提交给 adapter 的这份列表里：不经过 MessageListStore、不写本地库、
+     * 不参与登录同步，所以不会像真正插入的本地消息那样在卸载重装后被同步通道重放成
+     * 永远转圈的残骸。撤走的条件由 [ChatbotConversationController.placeholderTimestampSeconds]
+     * 统一判定——正文到达，或者等待超时。
+     */
+    private fun withChatbotPlaceholder(
+        messages: List<MessageInfo>,
+        controller: ChatbotConversationController
+    ): List<MessageInfo> {
+        val timestampSeconds = controller.placeholderTimestampSeconds(messages) ?: return messages
+        val placeholder = ChatbotPlaceholderMessageFactory.create(
+            conversationID = controller.conversationID,
+            timestampSeconds = timestampSeconds,
+            sender = ChatbotPlaceholderMessageFactory.resolveSender(messages)
+        )
+        return listOf(placeholder) + messages
+    }
+
     private fun isAtLatestPosition(): Boolean {
         if (!::adapter.isInitialized || !::viewModel.isInitialized) {
             return false
@@ -936,7 +941,7 @@ class MessageListView @JvmOverloads constructor(
         return MessageListAutoScrollPolicy.isAtLatestPosition(
             hasItems = adapter.itemCount > 0,
             hasMoreNewerMessages = hasMoreNewerForNavigation(),
-            canScrollTowardLatest = recyclerView.canScrollVertically(1)
+            canScrollTowardLatest = !locateCoordinator.isScrolledToBottom()
         )
     }
 
@@ -1378,29 +1383,6 @@ class MessageListView @JvmOverloads constructor(
             )
         }
         return partition.allowedTargets
-    }
-
-    private fun resolveChatbotPlaceholderSender(
-        sourceMessages: List<MessageInfo>,
-        conversationID: String
-    ): MessageSenderInfo? {
-        val previousSender = sourceMessages.asReversed().firstOrNull { message ->
-            val data = ChatbotMessageProtocol.parse(message)
-            !message.isSentBySelf &&
-                (data?.source == ChatbotMessageSource.FLOW ||
-                    data?.source == ChatbotMessageSource.ERROR)
-        }?.from
-        if (previousSender != null) {
-            return previousSender
-        }
-        val conversation = viewModel.conversationListState.conversationList.value
-            .firstOrNull { it.conversationID == conversationID }
-            ?: return null
-        return MessageSenderInfo(
-            userID = ChatbotConversationPolicy.targetID(conversationID).orEmpty(),
-            avatarURL = conversation.avatarURL,
-            nickname = conversation.title
-        )
     }
 
     private fun showForwardTargetSelector(

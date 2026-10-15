@@ -28,6 +28,7 @@ import com.google.gson.Gson
 import io.trtc.tuikit.chat.uikit.components.common.EventBus
 import io.trtc.tuikit.chat.uikit.components.common.observeOn
 import io.trtc.tuikit.chat.uikit.components.common.expandTouchTarget
+import io.trtc.tuikit.chat.uikit.components.aiassistant.AIAssistantControlMessages
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
@@ -179,7 +180,9 @@ class ChatActivity : BaseActivity() {
                 val payload = summaryContext.message.messagePayload as? CustomMessagePayload
                 CustomLinkMessage.from(payload?.customData)?.text
             }
-        )
+        ).addMessageExclusion {
+            AIAssistantControlMessages.isControlMessage(it)
+        }
 
         val sdkAppID = LoginStore.shared.sdkAppID
         val messageInputConfig = ChatMessageInputConfig().customizeActions {
@@ -233,6 +236,7 @@ class ChatActivity : BaseActivity() {
             },
             onMultiSelectStateChanged = { isMultiSelect ->
                 updateHeaderForMultiSelect(isMultiSelect)
+                chatPageView.setMessageListFooterOverlayVisible(!isMultiSelect)
             },
             onTypingStatusChanged = { isTyping ->
                 isPeerTyping = isTyping

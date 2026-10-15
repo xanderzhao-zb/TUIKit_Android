@@ -7,14 +7,23 @@ import io.trtc.tuikit.chat.uikit.components.messageinput.config.MessageInputConf
 internal class ChatbotMessageInputConfig(
     private val base: MessageInputConfigProtocol
 ) : MessageInputConfigProtocol {
-    override val isShowAudioRecorder: Boolean = false
-    override val isShowPhotoTaker: Boolean = false
+    override val isShowAudioRecorder: Boolean
+        get() = base.isShowAudioRecorder
+    override val isShowPhotoTaker: Boolean
+        get() = base.isShowPhotoTaker
     override val isShowAudioCall: Boolean = false
     override val isShowVideoCall: Boolean = false
-    override val isShowMore: Boolean = false
-    override val isShowEmoji: Boolean = false
+    override val isShowMore: Boolean
+        get() = base.isShowMore
+    override val isShowEmoji: Boolean
+        get() = base.isShowEmoji
     override val enableMention: Boolean = false
-    override val enableLongPressToTalk: Boolean = false
+    override val enableLongPressToTalk: Boolean
+        get() = base.enableLongPressToTalk
+    override val enableRealtimeVoiceToText: Boolean
+        get() = base.enableRealtimeVoiceToText
+    override val enableSendRecordedVoice: Boolean
+        get() = base.enableSendRecordedVoice
     override val audioMaxRecordDurationMs: Int
         get() = base.audioMaxRecordDurationMs
     override val actionCustomizer: MessageInputActionCustomizer?

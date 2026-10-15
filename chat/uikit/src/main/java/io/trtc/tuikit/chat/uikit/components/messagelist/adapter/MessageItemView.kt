@@ -844,7 +844,23 @@ class MessageItemView(
     private fun applyContentViewWidth() {
         val contentView = cachedContentView ?: return
         val innerPad = bubbleContentContainer.paddingLeft + bubbleContentContainer.paddingRight
-        val cap = (maxContentWidth - innerPad).coerceAtLeast(0)
+        val cap = if (fillAvailableWidth) {
+            (maxContentWidth - innerPad).coerceAtLeast(0)
+        } else {
+            // 头像关掉时气泡上限已经含了头像位宽；再扣 60dp 最坏状态栏会把这块宽度吃掉。
+            // 真实状态宽度已在 bubbleContainer.maxWidth 里扣过，这里不必再预留。
+            val statusReserve = if (config.isShowLeftAvatar || config.isShowRightAvatar) {
+                (STATUS_AREA_WORST_CASE_DP * density).toInt()
+            } else {
+                0
+            }
+            val bubbleCap = (bubbleContainer.maxWidth - innerPad).coerceAtLeast(0)
+            val rowCap = (bubbleRow.maxWidth - statusReserve - innerPad).coerceAtLeast(0)
+            when {
+                bubbleCap > 0 && rowCap > 0 -> minOf(bubbleCap, rowCap)
+                else -> maxOf(bubbleCap, rowCap)
+            }
+        }
         (contentView as? TextMessageWidthAware)?.setMessageMaxWidth(cap)
 
         val designedWidth = cachedContentDesignedWidth

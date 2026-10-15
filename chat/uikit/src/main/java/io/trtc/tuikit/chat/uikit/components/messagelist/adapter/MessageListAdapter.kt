@@ -135,7 +135,9 @@ class MessageListAdapter internal constructor(
 
     override fun onViewDetachedFromWindow(holder: RecyclerView.ViewHolder) {
         when (holder) {
-            is MessageViewHolder -> holder.recycle()
+            // MessageViewHolder 的清理只能挂在 onViewRecycled 上。detach 在一次普通的布局
+            // 重排里就会发生，RecyclerView 随后直接从 scrap 复用该 holder、不再走 bind，
+            // 此时若已把内容清空，留在屏幕上的就是一个尺寸还在、内容为空的气泡。
             is CustomCellViewHolder -> holder.detachFromWindow()
         }
         super.onViewDetachedFromWindow(holder)

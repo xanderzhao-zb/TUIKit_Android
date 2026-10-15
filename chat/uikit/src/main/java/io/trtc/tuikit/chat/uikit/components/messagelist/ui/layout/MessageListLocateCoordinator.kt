@@ -111,6 +111,29 @@ internal class MessageListLocateCoordinator(
         clearPendingScrollToLatestMessage()
     }
 
+    /**
+     * 列表是否已经滚到底部。
+     *
+     * 曾经这里判的是「最新那条消息整条完全可见」，但 AI 的长回复经常比视口还高，
+     * 滚到底也只能露出一截，那个条件永远不成立，小舌头因此消不掉、新消息也不跟随。
+     *
+     * 现在只看 position 0（reverseLayout 下位于视觉最底部）的下边缘有没有落在视口内，
+     * 和消息本身多高无关。用布局位置而不是 computeVerticalScrollOffset，是因为后者在
+     * 条目高度差异很大时只是按平均高度估算的，判不准这种边界。
+     */
+    fun isScrolledToBottom(): Boolean {
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return false
+        if (layoutManager.itemCount <= 0) {
+            return true
+        }
+        if (layoutManager.findFirstVisibleItemPosition() != 0) {
+            return false
+        }
+        val latestView = layoutManager.findViewByPosition(0) ?: return false
+        return layoutManager.getDecoratedBottom(latestView) <=
+            recyclerView.height - recyclerView.paddingBottom
+    }
+
     private fun clearPendingScrollToLatestMessage() {
         pendingScrollToLatestMessage = false
         pendingScrollToLatestMessageId = null

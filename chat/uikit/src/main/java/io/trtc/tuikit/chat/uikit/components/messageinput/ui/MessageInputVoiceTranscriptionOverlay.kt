@@ -50,6 +50,7 @@ internal class MessageInputVoiceTranscriptionOverlay(
     private val onTranslate: (String, String, (String) -> Unit, () -> Unit) -> Unit,
     private val onStartSpeak: (String, () -> Unit, () -> Unit, () -> Unit) -> Unit,
     private val onStopSpeak: () -> Unit,
+    private val allowSendOriginalVoice: Boolean = true,
 ) {
     private val context = anchorView.context
     private val density = context.resources.displayMetrics.density
@@ -127,8 +128,18 @@ internal class MessageInputVoiceTranscriptionOverlay(
     private var isDismissed = false
     private var languagePopupWindow: PopupWindow? = null
 
+    /**
+     * 最近一次由程序写进输入框的文本。和输入框当前内容不一致就说明用户自己改过，
+     * 后到的识别结果不能把他的编辑冲掉。
+     */
+    private var lastProgrammaticText: String? = null
+
     init {
         buildLayout()
+        if (!allowSendOriginalVoice) {
+            sendAudioButton.visibility = View.GONE
+            sendAudioLabel.visibility = View.GONE
+        }
         bindActions()
         applyTheme()
     }
@@ -152,16 +163,24 @@ internal class MessageInputVoiceTranscriptionOverlay(
         }
     }
 
+    /**
+     * 填入新到的识别结果。
+     *
+     * 实时识别下会被调用两次：松手时先用已识别的部分把浮层铺出来，收尾窗口结束后再补上尾句。
+     * 所以这里不能假设「只会调一次」——用户已经动手改过输入框时要让路，翻译的源文本也要跟着
+     * 换成最新的识别结果，否则译的是那半句。
+     */
     fun updateResult(resultText: String?) {
+        if (hasUserEditedText()) {
+            return
+        }
         state = if (resultText.isNullOrBlank()) {
             TranscriptionState.EMPTY
         } else {
             TranscriptionState.TEXT
         }
         if (state == TranscriptionState.TEXT) {
-            if (originalText.isEmpty()) {
-                originalText = resultText.orEmpty()
-            }
+            originalText = resultText.orEmpty()
             translatedText = null
             isTranslating = false
             if (isSpeaking) {
@@ -413,8 +432,14 @@ internal class MessageInputVoiceTranscriptionOverlay(
             editText.setText(displayText)
             editText.setSelection(editText.text?.length ?: 0)
             editText.isEnabled = state == TranscriptionState.TEXT
+            lastProgrammaticText = displayText
         }
         sendTextButton.isEnabled = state == TranscriptionState.TEXT
+    }
+
+    private fun hasUserEditedText(): Boolean {
+        val applied = lastProgrammaticText ?: return false
+        return editText.text?.toString() != applied
     }
 
     private fun renderChipRow() {
@@ -589,6 +614,7 @@ internal class MessageInputVoiceTranscriptionOverlay(
         updateBubbleHeightForState(value)
         editText.setText(value)
         editText.setSelection(editText.text?.length ?: 0)
+        lastProgrammaticText = value
         sendTextButton.isEnabled = state == TranscriptionState.TEXT && value.isNotBlank()
     }
 

@@ -28,7 +28,8 @@ internal object MessageInputListenerBinder {
         viewModelProvider: () -> MessageInputViewModel?,
         isLongPressToTalkEnabled: () -> Boolean,
         sendCurrentText: () -> Unit,
-        showVoiceTranscriptionDraft: (audioPath: String, audioDurationSecond: Int, text: String?) -> Unit,
+        openVoiceTranscriptionDraft: (audioPath: String, audioDurationSecond: Int, initialText: String?) -> Unit,
+        updateVoiceTranscriptionDraft: (audioPath: String, text: String?) -> Unit,
         logDebug: (String) -> Unit
     ) {
         btnMore.setOnClickListener {
@@ -87,10 +88,36 @@ internal object MessageInputListenerBinder {
                     viewModelProvider()?.sendAudioMessage(audioPath, audioDurationSecond)
                 }
                 AudioRecorderReleaseAction.TRANSCRIBE -> {
-                    showVoiceTranscriptionDraft(audioPath, audioDurationSecond, null)
                     coordinatorProvider().dispatch(InputModeEvent.SwitchToTextCollapsed)
-                    viewModelProvider()?.convertLocalAudioToText(btnPressToTalk.context, audioPath) { text ->
-                        showVoiceTranscriptionDraft(audioPath, audioDurationSecond, text)
+                    val uploadAndConvert = {
+                        viewModelProvider()?.convertLocalAudioToText(btnPressToTalk.context, audioPath) { text ->
+                            updateVoiceTranscriptionDraft(audioPath, text)
+                        }
+                        Unit
+                    }
+                    // 边说边识别的文本松手那一刻就在手上，拿它把草稿框一次铺成最终形态，
+                    // 别再走一轮「三个点 → 文本」。尾句还在路上，收尾后再补一次完整文本。
+                    val consumed = btnPressToTalk.consumeRealtimeTranscription(
+                        onPartialText = { partialText ->
+                            openVoiceTranscriptionDraft(
+                                audioPath,
+                                audioDurationSecond,
+                                partialText.ifBlank { null },
+                            )
+                        },
+                        onFinalText = { finalText ->
+                            if (finalText.isBlank()) {
+                                uploadAndConvert()
+                            } else {
+                                updateVoiceTranscriptionDraft(audioPath, finalText)
+                            }
+                        },
+                    )
+                    // 实时识别没跑起来（关掉了 / 机型不支持 / 会话没建成），
+                    // 回落到「上传整段音频再识别」这条慢路径，这时才该显示识别中
+                    if (!consumed) {
+                        openVoiceTranscriptionDraft(audioPath, audioDurationSecond, null)
+                        uploadAndConvert()
                     }
                 }
                 AudioRecorderReleaseAction.CANCEL -> {

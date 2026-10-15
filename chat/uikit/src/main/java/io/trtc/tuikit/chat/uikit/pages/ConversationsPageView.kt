@@ -12,6 +12,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import com.google.android.material.appbar.AppBarLayout
 import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ChatConversationActionConfig
 import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ConversationActionConfigProtocol
+import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ConversationMatcher
 import io.trtc.tuikit.chat.uikit.components.conversationlist.ui.ConversationListView
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
@@ -162,6 +163,7 @@ class ConversationsPageView @JvmOverloads constructor(
         showSearchBar: Boolean = true,
         headerTitle: String? = null,
         headerRightAction: View? = null,
+        conversationExclusion: ConversationMatcher? = null,
         onConversationClick: ((ConversationInfo) -> Unit)? = null,
         onSearchClick: (() -> Unit)? = null
     ) {
@@ -171,6 +173,7 @@ class ConversationsPageView @JvmOverloads constructor(
         headerRightAction?.let { pageHeader.setEditContent(it) }
         conversationListView.setup(
             config = config,
+            conversationExclusion = conversationExclusion,
             onConversationClick = onConversationClick ?: {}
         )
     }

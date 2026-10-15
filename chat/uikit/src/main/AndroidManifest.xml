@@ -56,6 +56,13 @@
             android:name=".components.imageviewer.ui.ImageViewerActivity"
             android:exported="false"
             android:theme="@style/Chat_UIKit_Theme.FullscreenMedia" />
+
+        <activity
+            android:name=".components.aiassistant.call.AICallActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustNothing" />
     </application>
 
 </manifest>

@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -21,7 +23,9 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.PopupWindow
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
@@ -36,14 +40,26 @@ import io.trtc.tuikit.chat.uikit.components.audiorecorder.AudioRecorderResultCod
 import io.trtc.tuikit.atomicx.common.permission.PermissionCallback
 import io.trtc.tuikit.chat.uikit.components.common.ChatDateTimeUtils
 import io.trtc.tuikit.chat.uikit.components.common.ChatPermissionHelper
+import io.trtc.tuikit.chat.uikit.components.messageinput.asr.RealtimeAsrAudioCapture
+import io.trtc.tuikit.chat.uikit.components.messageinput.asr.RealtimeAsrRecognizer
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.widget.basicwidget.toast.AtomicToast
+import java.util.Locale
 
 data class AudioRecorderViewConfig(
     val minDurationMs: Int = 1000,
     val maxDurationMs: Int = 60000,
     val cancelTouchSlopDp: Int = 60,
     val startOnLongPress: Boolean = true,
+    /**
+     * 滑到「转文字」时是否边说边出字。关掉的话行为退回「松手后上传整段音频再识别」。
+     * 机型不支持实时采集时也会自动退回，不需要接入方关心。
+     */
+    val enableRealtimeVoiceToText: Boolean = true,
+    /** 松手是否发送原语音。关掉后中间区域松手取消，提示改为滑到转文字。 */
+    val enableReleaseToSendVoice: Boolean = true,
+    /** 实时识别语言，ISO 639-1，如 "zh"、"en"；留空交给后台判断。 */
+    val realtimeVoiceToTextLanguage: String = Locale.getDefault().language.orEmpty(),
 )
 
 fun interface AudioRecorderViewResultListener {
@@ -65,6 +81,12 @@ class AudioRecorderView @JvmOverloads constructor(
     private var pendingReleaseAction = AudioRecorderReleaseAction.SEND_AUDIO
     private var isWaitingForLongPress = false
     private var hasRecorderStarted = false
+
+    /** 本次长按的实时识别，随录音一起启停。 */
+    private var realtimeRecognizer: RealtimeAsrRecognizer? = null
+
+    /** 已松手在「转文字」上、等调用方来取结果的那个识别器。 */
+    private var pendingRealtimeRecognizer: RealtimeAsrRecognizer? = null
     private val longPressRunnable = Runnable {
         isWaitingForLongPress = false
         beginRecordIfPossible()
@@ -80,6 +102,30 @@ class AudioRecorderView @JvmOverloads constructor(
 
     fun setOnResultListener(listener: AudioRecorderViewResultListener?) {
         resultListener = listener
+    }
+
+    /**
+     * 取走本次「转文字」松手对应的实时识别结果，只能在 [AudioRecorderViewResultListener] 回调里调用一次。
+     *
+     * 结果分两步给，因为 ASR 是流式的、松手时尾句往往还在路上：
+     * - [onPartialText] 同步回调，带松手那一刻已经识别出的文本。已经识别出来的部分没有理由
+     *   让用户再等一遍，调用方应当拿它直接把界面铺成最终形态。
+     * - [onFinalText] 在收尾窗口结束后回调（数百毫秒量级），带补齐尾句的完整文本。
+     *
+     * @return 本次长按没有跑实时识别（关掉了、机型不支持、会话没建起来）时返回 false，
+     *   此时两个回调都不会被调用，调用方应当回落到「上传整段音频再识别」
+     */
+    fun consumeRealtimeTranscription(
+        onPartialText: (String) -> Unit,
+        onFinalText: (String) -> Unit,
+    ): Boolean {
+        val recognizer = pendingRealtimeRecognizer ?: return false
+        pendingRealtimeRecognizer = null
+        // 必须排在 finish 之前：会话没建起来时 finish 会同步回调 onFinalText，
+        // 顺序反了就成了「先更新一个还没铺出来的界面」
+        onPartialText(recognizer.text)
+        recognizer.finish(onFinalText)
+        return true
     }
 
     fun cancelRecording() {
@@ -114,7 +160,7 @@ class AudioRecorderView @JvmOverloads constructor(
         if (!isRecording) {
             return
         }
-        pendingReleaseAction = obtainOverlay().releaseActionFor(rawX, rawY)
+        pendingReleaseAction = resolveReleaseAction(obtainOverlay().releaseActionFor(rawX, rawY))
         if (pendingReleaseAction == AudioRecorderReleaseAction.CANCEL) {
             AudioRecorder.cancelRecord()
         } else {
@@ -124,6 +170,8 @@ class AudioRecorderView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         cancelRecording()
+        pendingRealtimeRecognizer?.cancel()
+        pendingRealtimeRecognizer = null
         super.onDetachedFromWindow()
     }
 
@@ -157,7 +205,9 @@ class AudioRecorderView @JvmOverloads constructor(
                     return true
                 }
                 if (isRecording) {
-                    pendingReleaseAction = obtainOverlay().releaseActionFor(event.rawX, event.rawY)
+                    pendingReleaseAction = resolveReleaseAction(
+                        obtainOverlay().releaseActionFor(event.rawX, event.rawY)
+                    )
                     if (pendingReleaseAction == AudioRecorderReleaseAction.CANCEL) {
                         AudioRecorder.cancelRecord()
                     } else {
@@ -226,9 +276,54 @@ class AudioRecorderView @JvmOverloads constructor(
                 }
             },
         )
+        // 必须排在 startRecord 之后：语音消息本身才是主角，先让它把麦克风占住，
+        // 万一机型不允许同一应用并发采集，让步的是实时识别而不是这条语音。
+        if (isRecording) {
+            primeRealtimeRecognizer()
+        }
+    }
+
+    /**
+     * 录音一开始就把麦克风的实时通路和 ASR 会话都拉起来。
+     *
+     * 会话不能等到手指滑到「转文字」再建：startASR 是一个网络往返，那几百毫秒到几秒会
+     * 原样变成用户滑过去之后盯着空气等的时间。
+     */
+    private fun primeRealtimeRecognizer() {
+        realtimeRecognizer?.cancel()
+        realtimeRecognizer = null
+        obtainOverlay().setRealtimeRecognitionActive(false)
+        if (!config.enableRealtimeVoiceToText || !RealtimeAsrAudioCapture.isSupported()) {
+            return
+        }
+        val recognizer = RealtimeAsrRecognizer(
+            language = config.realtimeVoiceToTextLanguage,
+        ) { text ->
+            if (isRecording) {
+                obtainOverlay().updateRecognizedText(text)
+            }
+        }
+        if (recognizer.prime()) {
+            realtimeRecognizer = recognizer
+            obtainOverlay().setRealtimeRecognitionActive(true)
+        }
     }
 
     private fun handleRecordResult(result: AudioRecorderResult) {
+        pendingReleaseAction = resolveReleaseAction(pendingReleaseAction)
+        val recognizer = realtimeRecognizer
+        realtimeRecognizer = null
+        if (recognizer != null) {
+            // 只有「在转文字上松手且录音本身成功」才值得把识别结果留给调用方，其余一律丢弃
+            if (pendingReleaseAction == AudioRecorderReleaseAction.TRANSCRIBE &&
+                result.isSuccess &&
+                recognizer.isRecognizing
+            ) {
+                pendingRealtimeRecognizer = recognizer
+            } else {
+                recognizer.cancel()
+            }
+        }
         when (result.resultCode) {
             AudioRecorderResultCode.ERROR_LESS_THAN_MIN_DURATION -> {
                 AtomicToast.show(
@@ -270,6 +365,9 @@ class AudioRecorderView @JvmOverloads constructor(
             else -> Unit
         }
         resultListener?.onCompleted(result, pendingReleaseAction)
+        // 调用方没来取就说明它不打算用，别让识别器和麦克风一直挂着
+        pendingRealtimeRecognizer?.cancel()
+        pendingRealtimeRecognizer = null
         resetToIdleState()
     }
 
@@ -301,6 +399,13 @@ class AudioRecorderView @JvmOverloads constructor(
             PackageManager.PERMISSION_GRANTED
     }
 
+    private fun resolveReleaseAction(action: AudioRecorderReleaseAction): AudioRecorderReleaseAction {
+        if (!config.enableReleaseToSendVoice && action == AudioRecorderReleaseAction.SEND_AUDIO) {
+            return AudioRecorderReleaseAction.CANCEL
+        }
+        return action
+    }
+
     private fun updateReleaseAction(releaseAction: AudioRecorderReleaseAction) {
         pendingReleaseAction = releaseAction
         val nextState = when (releaseAction) {
@@ -313,6 +418,10 @@ class AudioRecorderView @JvmOverloads constructor(
             return
         }
         currentUiState = nextState
+        // 会话按下时就建好了，这里只是打开上行；滑走再滑回来不会重开，识别一直连着
+        if (nextState == RecordUiState.READY_TO_TRANSCRIBE) {
+            realtimeRecognizer?.beginRecognize()
+        }
         obtainOverlay().update(
             currentUiState,
             if (hasRecorderStarted) AudioRecorder.currentTimeMs.value else null,
@@ -322,6 +431,8 @@ class AudioRecorderView @JvmOverloads constructor(
     }
 
     private fun resetToIdleState() {
+        realtimeRecognizer?.cancel()
+        realtimeRecognizer = null
         isRecording = false
         hasRecorderStarted = false
         isWaitingForLongPress = false
@@ -339,10 +450,12 @@ class AudioRecorderView @JvmOverloads constructor(
             overlay?.dismiss()
             overlay = null
         }
-        return overlay ?: AudioRecorderOverlay(anchorView).also {
+        val current = overlay ?: AudioRecorderOverlay(anchorView).also {
             overlay = it
             overlayAnchorView = anchorView
         }
+        current.allowReleaseToSendVoice = config.enableReleaseToSendVoice
+        return current
     }
 
     internal enum class RecordUiState {
@@ -356,6 +469,7 @@ class AudioRecorderView @JvmOverloads constructor(
 private class AudioRecorderOverlay(
     private val anchorView: View,
 ) {
+    var allowReleaseToSendVoice: Boolean = true
     private val context = anchorView.context
     private val density = context.resources.displayMetrics.density
 
@@ -365,17 +479,16 @@ private class AudioRecorderOverlay(
     private val rootView: FrameLayout = FrameLayout(context)
     private val backgroundView = OverlayGradientBackgroundView(context)
 
-    private val bubbleHeight = (40 * density).toInt()
-    private val bubbleDefaultHorizontalMargin = (8 * density).toInt()
-    private val bubbleDefaultBottomMargin = (43 * density).toInt()
     private val animationSpec = AudioRecorderOverlayAnimationPolicy.createSpec()
     private val animationInterpolator = DecelerateInterpolator()
     private var isDismissed = false
-    private val bubbleView = BubbleView(context).apply {
+    private val bubbleView = RecognitionBubbleView(context).apply {
         val colors = themeColors
         setBubbleColor(colors.buttonColorPrimaryDefault)
         setContentColor(colors.textColorButton)
     }
+    private var lastReleaseAction = AudioRecorderReleaseAction.SEND_AUDIO
+    private var realtimeActive = false
     private val statusTextView = TextView(context).apply {
         gravity = Gravity.CENTER
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
@@ -452,15 +565,16 @@ private class AudioRecorderOverlay(
         statusLp.bottomMargin = (199 * density).toInt()
         rootView.addView(statusTextView, statusLp)
 
+        // 识别气泡浮在屏幕中部、按钮行上方，底边固定、内容多了往上长
         val bubbleLp = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            bubbleHeight,
-            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.START,
         )
-        bubbleLp.marginStart = bubbleDefaultHorizontalMargin
-        bubbleLp.marginEnd = bubbleDefaultHorizontalMargin
-        bubbleLp.bottomMargin = bubbleDefaultBottomMargin
+        bubbleLp.bottomMargin = (BUBBLE_BOTTOM_MARGIN_DP * density).toInt()
         rootView.addView(bubbleView, bubbleLp)
+        bubbleView.setMaxContentHeight((BUBBLE_MAX_TEXT_HEIGHT_DP * density).toInt())
+        updateBubbleGeometry()
     }
 
     fun show() {
@@ -470,7 +584,6 @@ private class AudioRecorderOverlay(
         isDismissed = false
         rootView.animate().cancel()
         rootView.alpha = animationSpec.enterStartAlpha
-        updateBubbleLayoutForAnchorBeforeShow()
         rootView.visibility = View.VISIBLE
         popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, 0, 0)
         rootView.animate()
@@ -481,61 +594,78 @@ private class AudioRecorderOverlay(
             .start()
         rootView.post {
             if (popupWindow.isShowing && !isDismissed) {
-                updateBubbleLayoutForAnchorAfterShow()
+                updateBubbleGeometry()
             }
         }
     }
 
-    private fun updateBubbleLayoutForAnchorBeforeShow() {
-        val root = anchorView.rootView
-        val rootLocation = IntArray(2)
-        val anchorLocation = IntArray(2)
-        root.getLocationOnScreen(rootLocation)
-        anchorView.getLocationOnScreen(anchorLocation)
-        updateBubbleLayout(
-            rootWidth = root.width,
-            rootHeight = root.height,
-            anchorLeft = anchorLocation[0] - rootLocation[0],
-            anchorTop = anchorLocation[1] - rootLocation[1],
-        )
+    /** 实时识别每吐一次字就刷新一次气泡。 */
+    fun updateRecognizedText(text: String) {
+        bubbleView.setRecognizedText(text)
     }
 
-    private fun updateBubbleLayoutForAnchorAfterShow() {
-        val rootLocation = IntArray(2)
-        val anchorLocation = IntArray(2)
-        rootView.getLocationOnScreen(rootLocation)
-        anchorView.getLocationOnScreen(anchorLocation)
-        updateBubbleLayout(
-            rootWidth = rootView.width,
-            rootHeight = rootView.height,
-            anchorLeft = anchorLocation[0] - rootLocation[0],
-            anchorTop = anchorLocation[1] - rootLocation[1],
-        )
+    /**
+     * 本次长按有没有跑实时识别。没跑（开关关了、机型不支持、采集起不来）时气泡不铺开，
+     * 否则用户会对着一个永远停在「识别中」的空框等下去。
+     */
+    fun setRealtimeRecognitionActive(value: Boolean) {
+        if (realtimeActive == value) {
+            return
+        }
+        realtimeActive = value
+        bubbleView.setRecognizedText("")
+        updateBubbleGeometry()
     }
 
-    private fun updateBubbleLayout(
-        rootWidth: Int,
-        rootHeight: Int,
-        anchorLeft: Int,
-        anchorTop: Int,
-    ) {
-        val layout = AudioRecorderOverlayBubbleLayoutPolicy.calculate(
-            rootWidth = rootWidth,
-            rootHeight = rootHeight,
-            anchorLeft = anchorLeft,
-            anchorTop = anchorTop,
-            anchorWidth = anchorView.width,
-            anchorHeight = anchorView.height,
-            defaultHorizontalMargin = bubbleDefaultHorizontalMargin,
-            defaultBottomMargin = bubbleDefaultBottomMargin,
-            bubbleHeight = bubbleHeight,
-        )
+    /**
+     * 按当前释放动作摆放气泡：默认居中、滑到「转文字」时铺满并指向该按钮、
+     * 滑到「取消」时缩小左移并指向取消按钮。
+     *
+     * 位置一律用 marginStart + Gravity.START 表达，RTL 由系统镜像；只有画在 canvas 上的
+     * 箭头要自己换算成物理坐标。
+     */
+    private fun updateBubbleGeometry() {
+        val rootWidth = rootView.width.takeIf { it > 0 }
+            ?: context.resources.displayMetrics.widthPixels
+        val actionCenterInset = (ACTION_CENTER_INSET_DP * density).toInt()
+        // 手指一到「转文字」就铺开，不等第一个识别结果——首字还要等一个后台往返，
+        // 拿它当铺开的触发条件，用户看到的就是「滑过来了但什么都没发生」。等字期间显示占位文案。
+        val expanded = realtimeActive && lastReleaseAction == AudioRecorderReleaseAction.TRANSCRIBE
+        val edgeMargin = (BUBBLE_EDGE_MARGIN_DP * density).toInt()
+
+        val width: Int
+        val marginStart: Int
+        val arrowFromStart: Float
+        when {
+            expanded -> {
+                width = (rootWidth - edgeMargin * 2).coerceAtLeast(1)
+                marginStart = edgeMargin
+                arrowFromStart = (rootWidth - actionCenterInset - edgeMargin).toFloat()
+            }
+            lastReleaseAction == AudioRecorderReleaseAction.CANCEL -> {
+                width = (COMPACT_BUBBLE_WIDTH_DP * density).toInt()
+                    .coerceAtMost((rootWidth - edgeMargin * 2).coerceAtLeast(1))
+                val maxStart = (rootWidth - width - edgeMargin).coerceAtLeast(edgeMargin)
+                marginStart = (actionCenterInset - width / 2).coerceIn(edgeMargin, maxStart)
+                arrowFromStart = (actionCenterInset - marginStart).toFloat()
+            }
+            else -> {
+                width = (COMPACT_BUBBLE_WIDTH_DP * density).toInt()
+                    .coerceAtMost((rootWidth - edgeMargin * 2).coerceAtLeast(1))
+                marginStart = ((rootWidth - width) / 2).coerceAtLeast(edgeMargin)
+                arrowFromStart = width / 2f
+            }
+        }
+
         val layoutParams = bubbleView.layoutParams as FrameLayout.LayoutParams
-        layoutParams.marginStart = layout.leftMargin
-        layoutParams.marginEnd = layout.rightMargin
-        layoutParams.bottomMargin = layout.bottomMargin
-        layoutParams.height = layout.height
-        bubbleView.layoutParams = layoutParams
+        if (layoutParams.width != width || layoutParams.marginStart != marginStart) {
+            layoutParams.width = width
+            layoutParams.marginStart = marginStart
+            bubbleView.layoutParams = layoutParams
+        }
+        val isRtl = rootView.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        bubbleView.setArrowCenterX(if (isRtl) width - arrowFromStart else arrowFromStart)
+        bubbleView.setExpanded(expanded)
     }
 
     fun releaseActionFor(rawX: Float, rawY: Float): AudioRecorderReleaseAction {
@@ -557,7 +687,10 @@ private class AudioRecorderOverlay(
             "READY_TO_TRANSCRIBE" -> AudioRecorderReleaseAction.TRANSCRIBE
             else -> AudioRecorderReleaseAction.SEND_AUDIO
         }
-        statusTextView.text = statusTextFor(releaseAction, durationMs, maxDurationMs)
+        lastReleaseAction = releaseAction
+        val statusText = statusTextFor(releaseAction, durationMs, maxDurationMs)
+        statusTextView.text = statusText
+        statusTextView.visibility = if (statusText.isEmpty()) View.GONE else View.VISIBLE
         val colors = themeColors
         applyThemedBackground(colors.bgColorOperate)
         statusTextView.setTextColor(colors.textColorSecondary)
@@ -585,7 +718,7 @@ private class AudioRecorderOverlay(
         bubbleView.setContentColor(colors.textColorButton)
         bubbleView.setPowerLevel(powerLevel)
         bubbleView.setDuration(durationMs)
-
+        updateBubbleGeometry()
     }
 
     private fun statusTextFor(
@@ -601,10 +734,19 @@ private class AudioRecorderOverlay(
                 context.getString(R.string.message_input_release_cancel_hint)
             }
             releaseAction == AudioRecorderReleaseAction.TRANSCRIBE -> {
-                context.getString(R.string.message_input_release_transcribe_hint)
+                // 气泡已经在出字，按钮上也写着「转文字」，这行提示是重复的。
+                // 实时识别没起来时仍要告诉用户松手才会转文字。
+                if (realtimeActive) {
+                    ""
+                } else {
+                    context.getString(R.string.message_input_release_transcribe_hint)
+                }
             }
             countdown != null -> {
                 context.getString(R.string.message_input_auto_stop_countdown, countdown)
+            }
+            !allowReleaseToSendVoice -> {
+                context.getString(R.string.message_input_slide_to_transcribe_hint)
             }
             else -> context.getString(R.string.message_input_release_send_hint)
         }
@@ -648,14 +790,23 @@ private class AudioRecorderOverlay(
             }
             .start()
     }
-}
 
-internal data class AudioRecorderOverlayBubbleLayout(
-    val leftMargin: Int,
-    val rightMargin: Int,
-    val bottomMargin: Int,
-    val height: Int,
-)
+    private companion object {
+        /** 气泡底边（箭头尖）离屏幕底部的距离，压在提示文案上方。 */
+        const val BUBBLE_BOTTOM_MARGIN_DP = 231
+
+        /** 只有波形时的气泡宽度。 */
+        const val COMPACT_BUBBLE_WIDTH_DP = 200
+
+        const val BUBBLE_EDGE_MARGIN_DP = 16
+
+        /** 取消 / 转文字两个圆形按钮的中心离各自那一侧屏幕边缘的距离：72 外边距 + 80 直径的一半。 */
+        const val ACTION_CENTER_INSET_DP = 112
+
+        /** 实时文本最多占这么高，再多就内部滚动，免得气泡顶出屏幕。 */
+        const val BUBBLE_MAX_TEXT_HEIGHT_DP = 220
+    }
+}
 
 internal data class AudioRecorderOverlayAnimationSpec(
     val enterStartAlpha: Float,
@@ -675,36 +826,6 @@ internal object AudioRecorderOverlayAnimationPolicy {
             exitEndAlpha = 0f,
             enterDurationMs = 120L,
             exitDurationMs = 100L,
-        )
-    }
-}
-
-internal object AudioRecorderOverlayBubbleLayoutPolicy {
-    fun calculate(
-        rootWidth: Int,
-        rootHeight: Int,
-        anchorLeft: Int,
-        anchorTop: Int,
-        anchorWidth: Int,
-        anchorHeight: Int,
-        defaultHorizontalMargin: Int,
-        defaultBottomMargin: Int,
-        bubbleHeight: Int,
-    ): AudioRecorderOverlayBubbleLayout {
-        if (rootWidth <= 0 || rootHeight <= 0 || anchorWidth <= 0 || anchorHeight <= 0) {
-            return AudioRecorderOverlayBubbleLayout(
-                leftMargin = defaultHorizontalMargin,
-                rightMargin = defaultHorizontalMargin,
-                bottomMargin = defaultBottomMargin,
-                height = bubbleHeight,
-            )
-        }
-        val anchorBottom = anchorTop + anchorHeight
-        return AudioRecorderOverlayBubbleLayout(
-            leftMargin = defaultHorizontalMargin,
-            rightMargin = defaultHorizontalMargin,
-            bottomMargin = (rootHeight - anchorBottom).coerceAtLeast(0),
-            height = anchorHeight,
         )
     }
 }
@@ -815,39 +936,93 @@ internal object AudioRecorderWaveformLayoutPolicy {
     }
 }
 
-private class BubbleView(context: Context) : View(context) {
+/**
+ * 长按录音时浮在屏幕中部的识别气泡：圆角矩形 + 朝下的箭头。
+ *
+ * 两种形态共用一个 View——没有识别文本时只画波形（箭头居中，气泡居中或在取消按钮上方），
+ * 有实时文本时文本在上、波形缩到右下角，箭头指向「转文字」按钮。形态切换由外部通过
+ * [setExpanded] / [setArrowCenterX] 与 layoutParams 驱动，这里只负责画和排内容。
+ */
+private class RecognitionBubbleView(context: Context) : FrameLayout(context) {
     private val density = context.resources.displayMetrics.density
-    private val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val waveformPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.TRANSPARENT
-        style = Paint.Style.FILL
-    }
+    private val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val path = Path()
     private val cornerRadius = 12f * density
+    private val arrowHeight = 8f * density
+    private val arrowHalfWidth = 8f * density
 
     private var bubbleColor = Color.TRANSPARENT
-    private var powerLevel: Int = 0
-    private var durationText: String = AudioRecorderDurationTextPolicy.formatDuration(null)
-    private val durationPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.TRANSPARENT
-        textAlign = Paint.Align.RIGHT
-        textSize = 12f * density
+    private var arrowCenterX: Float? = null
+    private var expanded = false
+    private var recognizedText = ""
+    private val placeholderText = context.getString(R.string.message_input_realtime_transcribing)
+
+    // 显隐由外层的 textScrollView 统一控制，这里不要再设 GONE——设了就再也没人打开它
+    private val textView = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+        includeFontPadding = false
+        setLineSpacing(4f * density, 1f)
+    }
+    private val textScrollView = MaxHeightScrollView(context).apply {
+        isVerticalScrollBarEnabled = false
+        overScrollMode = View.OVER_SCROLL_NEVER
+        visibility = View.GONE
+        addView(
+            textView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+    }
+    private val waveformView = RecorderWaveformView(context)
+    private val durationView = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        includeFontPadding = false
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        text = AudioRecorderDurationTextPolicy.formatDuration(null)
+    }
+    private val bottomRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    private val contentColumn = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
     }
 
-    private val totalBars = 24
-    private val phases: FloatArray
-    private val freqs: FloatArray
-
-    private val startTimeNanos = System.nanoTime()
-    private var animator: ValueAnimator? = null
-
     init {
-        bubblePaint.color = bubbleColor
-        bubblePaint.style = Paint.Style.FILL
-
-        val rng = java.util.Random(20260421L)
-        phases = FloatArray(totalBars) { rng.nextFloat() * (Math.PI * 2).toFloat() }
-        freqs = FloatArray(totalBars) { 2.4f + rng.nextFloat() * 3.2f }
+        setWillNotDraw(false)
+        applyTextContent()
+        bottomRow.addView(
+            waveformView,
+            LinearLayout.LayoutParams((96 * density).toInt(), (20 * density).toInt()),
+        )
+        bottomRow.addView(
+            durationView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { marginStart = (8 * density).toInt() },
+        )
+        contentColumn.addView(
+            textScrollView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        contentColumn.addView(
+            bottomRow,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { gravity = Gravity.CENTER_HORIZONTAL },
+        )
+        addView(
+            contentColumn,
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT),
+        )
+        applyContentPadding()
     }
 
     fun setBubbleColor(color: Int) {
@@ -859,18 +1034,139 @@ private class BubbleView(context: Context) : View(context) {
     }
 
     fun setContentColor(color: Int) {
-        waveformPaint.color = color
-        durationPaint.color = color
+        textView.setTextColor(color)
+        durationView.setTextColor(color)
+        waveformView.setBarColor(color)
+    }
+
+    fun setPowerLevel(level: Int) {
+        waveformView.setPowerLevel(level)
+    }
+
+    fun setDuration(durationMs: Int?) {
+        durationView.text = AudioRecorderDurationTextPolicy.formatDuration(durationMs)
+    }
+
+    fun setMaxContentHeight(maxHeightPx: Int) {
+        textScrollView.maxHeightPx = maxHeightPx
+    }
+
+    fun setRecognizedText(text: String) {
+        if (recognizedText == text) {
+            return
+        }
+        recognizedText = text
+        applyTextContent()
+        if (text.isNotEmpty() && textScrollView.visibility == View.VISIBLE) {
+            // 新识别出的字追加在末尾，让视口跟着走
+            textScrollView.post { textScrollView.fullScroll(View.FOCUS_DOWN) }
+        }
+    }
+
+    /** 还没出字时先占个位，免得铺开的气泡是一片空白。 */
+    private fun applyTextContent() {
+        val waiting = recognizedText.isEmpty()
+        textView.text = if (waiting) placeholderText else recognizedText
+        textView.alpha = if (waiting) PLACEHOLDER_ALPHA else 1f
+    }
+
+    fun setArrowCenterX(x: Float) {
+        if (arrowCenterX != x) {
+            arrowCenterX = x
+            invalidate()
+        }
+    }
+
+    fun setExpanded(value: Boolean) {
+        if (expanded == value) {
+            return
+        }
+        expanded = value
+        // 铺开之后文本是主角，波形缩到行尾当状态指示，时长让位
+        textScrollView.visibility = if (value) View.VISIBLE else View.GONE
+        durationView.visibility = if (value) View.GONE else View.VISIBLE
+        (bottomRow.layoutParams as LinearLayout.LayoutParams).gravity =
+            if (value) Gravity.END else Gravity.CENTER_HORIZONTAL
+        waveformView.layoutParams = waveformView.layoutParams.apply {
+            width = ((if (value) 40 else 96) * density).toInt()
+        }
+        requestLayout()
+    }
+
+    private companion object {
+        const val PLACEHOLDER_ALPHA = 0.6f
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val bodyBottom = height - arrowHeight
+        if (bodyBottom <= 0f) {
+            return
+        }
+        path.reset()
+        path.addRoundRect(
+            RectF(0f, 0f, width.toFloat(), bodyBottom),
+            cornerRadius,
+            cornerRadius,
+            Path.Direction.CW,
+        )
+        val centerX = (arrowCenterX ?: (width / 2f))
+            .coerceIn(cornerRadius + arrowHalfWidth, (width - cornerRadius - arrowHalfWidth).coerceAtLeast(0f))
+        path.moveTo(centerX - arrowHalfWidth, bodyBottom)
+        path.lineTo(centerX, height.toFloat())
+        path.lineTo(centerX + arrowHalfWidth, bodyBottom)
+        path.close()
+        canvas.drawPath(path, bubblePaint)
+        super.onDraw(canvas)
+    }
+
+    private fun applyContentPadding() {
+        val horizontal = (16 * density).toInt()
+        val vertical = (12 * density).toInt()
+        setPaddingRelative(horizontal, vertical, horizontal, vertical + arrowHeight.toInt())
+    }
+}
+
+/** 内容超过 [maxHeightPx] 时改为内部滚动，避免气泡无限往上长。 */
+private class MaxHeightScrollView(context: Context) : ScrollView(context) {
+    var maxHeightPx = 0
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val spec = if (maxHeightPx > 0) {
+            MeasureSpec.makeMeasureSpec(maxHeightPx, MeasureSpec.AT_MOST)
+        } else {
+            heightMeasureSpec
+        }
+        super.onMeasure(widthMeasureSpec, spec)
+    }
+}
+
+/** 气泡里那排随音量起伏的竖条。 */
+private class RecorderWaveformView(context: Context) : View(context) {
+    private val density = context.resources.displayMetrics.density
+    private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.TRANSPARENT
+    }
+    private val totalBars = 20
+    private val phases: FloatArray
+    private val freqs: FloatArray
+    private val startTimeNanos = System.nanoTime()
+    private var powerLevel = 0
+    private var animator: ValueAnimator? = null
+
+    init {
+        val rng = java.util.Random(20260421L)
+        phases = FloatArray(totalBars) { rng.nextFloat() * (Math.PI * 2).toFloat() }
+        freqs = FloatArray(totalBars) { 2.4f + rng.nextFloat() * 3.2f }
+    }
+
+    fun setBarColor(color: Int) {
+        barPaint.color = color
         invalidate()
     }
 
     fun setPowerLevel(level: Int) {
         powerLevel = level.coerceIn(0, 100)
-    }
-
-    fun setDuration(durationMs: Int?) {
-        durationText = AudioRecorderDurationTextPolicy.formatDuration(durationMs)
-        invalidate()
     }
 
     override fun onAttachedToWindow() {
@@ -894,60 +1190,33 @@ private class BubbleView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
-        val h = height.toFloat()
-        canvas.drawRoundRect(0f, 0f, w, h, cornerRadius, cornerRadius, bubblePaint)
-        drawWaveform(canvas, w, h)
-        drawDuration(canvas, w, h)
-    }
-
-    private fun drawWaveform(canvas: Canvas, w: Float, bodyBottom: Float) {
-        val centerY = bodyBottom / 2f
+        val centerY = height / 2f
         val barWidth = 2.5f * density
-        val gap = 3f * density
+        val gap = 2.5f * density
         val layout = AudioRecorderWaveformLayoutPolicy.calculate(
             containerWidth = w,
             barCount = totalBars,
             barWidth = barWidth,
             gap = gap,
         )
-
         val t = (System.nanoTime() - startTimeNanos) / 1_000_000_000.0
-        val amplitude = 13f * density * (0.45f + (powerLevel / 100f) * 0.55f)
+        val amplitude = (height / 2f) * 0.9f * (0.45f + (powerLevel / 100f) * 0.55f)
         val minH = 3f * density
-
         for (i in 0 until totalBars) {
-            val phase = phases[i].toDouble()
-            val freq = freqs[i].toDouble()
-            val wave = abs(sin(t * freq + phase)).toFloat()
+            val wave = abs(sin(t * freqs[i].toDouble() + phases[i].toDouble())).toFloat()
             val barH = minH + amplitude * wave
             val x = layout.startX + i * (barWidth + gap)
-            val top = centerY - barH / 2f
-            val bottom = centerY + barH / 2f
             canvas.drawRoundRect(
                 x,
-                top,
+                centerY - barH / 2f,
                 x + barWidth,
-                bottom,
+                centerY + barH / 2f,
                 barWidth / 2f,
                 barWidth / 2f,
-                waveformPaint,
+                barPaint,
             )
         }
     }
-
-    private fun drawDuration(canvas: Canvas, w: Float, h: Float) {
-        val centerY = h / 2f
-        val textY = centerY - (durationPaint.descent() + durationPaint.ascent()) / 2f
-        val padding = 16f * density
-        if (layoutDirection == View.LAYOUT_DIRECTION_RTL) {
-            durationPaint.textAlign = Paint.Align.LEFT
-            canvas.drawText(durationText, padding, textY, durationPaint)
-        } else {
-            durationPaint.textAlign = Paint.Align.RIGHT
-            canvas.drawText(durationText, w - padding, textY, durationPaint)
-        }
-    }
-
 }
 
 internal object AudioRecorderDurationTextPolicy {

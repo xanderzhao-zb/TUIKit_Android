@@ -4,6 +4,7 @@ object AppConstants {
 
     const val KEY_ENABLE_READ_RECEIPT = "enable_read_receipt"
     const val KEY_SHOW_CALLS_TAB = "show_calls_tab"
+    const val KEY_CALLS_TAB_DEFAULT_OFF_MIGRATED = "calls_tab_default_off_migrated"
     const val KEY_APP_LANGUAGE = "app_language"
     const val KEY_LOGIN_USER = "LoginUser"
     const val KEY_LOGIN_TOKEN = "LoginToken"

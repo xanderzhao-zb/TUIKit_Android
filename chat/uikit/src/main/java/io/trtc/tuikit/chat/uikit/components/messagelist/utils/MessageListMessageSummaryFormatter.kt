@@ -19,6 +19,7 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MergedMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
+import io.trtc.tuikit.atomicxcore.api.message.StreamMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.TextMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.TipsMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.VideoMessagePayload
@@ -146,6 +147,8 @@ class MessageListMessageSummaryFormatter(
     private fun formatBuiltInMessage(context: Context, message: MessageInfo): String {
         return when (val payload = message.messagePayload) {
             is TextMessagePayload -> payload.text
+            // 会话列表和搜索结果都是单行，markdown 里的换行和缩进要压平。
+            is StreamMessagePayload -> payload.markdown.replace(WHITESPACE_RUN, " ").trim()
             is ImageMessagePayload -> context.getString(R.string.message_list_message_type_image)
             is AudioMessagePayload -> {
                 val voiceLabel = context.getString(R.string.message_list_message_type_voice)
@@ -167,6 +170,8 @@ class MessageListMessageSummaryFormatter(
     }
 
 }
+
+private val WHITESPACE_RUN = Regex("\\s+")
 
 internal data class MessageSummaryRule(
     val matcher: MessageMatcher,

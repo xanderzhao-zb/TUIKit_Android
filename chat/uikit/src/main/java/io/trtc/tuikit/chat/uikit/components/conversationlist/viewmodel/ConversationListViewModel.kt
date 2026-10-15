@@ -14,6 +14,7 @@ import io.trtc.tuikit.chat.uikit.components.common.uicustom.CustomEditor
 import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ChatConversationActionConfig
 import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ConversationActionConfigProtocol
 import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ConversationActionCustomizer
+import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ConversationMatcher
 import io.trtc.tuikit.chat.uikit.components.conversationlist.model.ConversationActionIDs
 import io.trtc.tuikit.chat.uikit.components.conversationlist.model.ConversationCustomAction
 import io.trtc.tuikit.chat.uikit.components.conversationlist.model.ConversationCustomActionContext
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
@@ -136,12 +138,16 @@ class ConversationListViewModel(
     val conversationState = conversationListStore.state
     val hasMoreConversations = conversationState.hasMoreConversations
 
-    val conversationList: StateFlow<List<ConversationInfo>> = conversationState.conversationList
-        .map { list ->
-            list.filter { item ->
-                item.conversationID.isNotEmpty()
-            }.distinctBy { item -> item.conversationID }
-        }
+    private val conversationExclusion = MutableStateFlow<ConversationMatcher?>(null)
+
+    val conversationList: StateFlow<List<ConversationInfo>> = combine(
+        conversationState.conversationList,
+        conversationExclusion
+    ) { list, exclusion ->
+        list.filter { item ->
+            item.conversationID.isNotEmpty() && exclusion?.matches(item) != true
+        }.distinctBy { item -> item.conversationID }
+    }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -174,6 +180,10 @@ class ConversationListViewModel(
 
     fun updateConfig(config: ConversationActionConfigProtocol) {
         conversationActionConfig = config
+    }
+
+    fun updateConversationExclusion(exclusion: ConversationMatcher?) {
+        conversationExclusion.value = exclusion
     }
 
     fun addSelection(conversation: ConversationInfo) {

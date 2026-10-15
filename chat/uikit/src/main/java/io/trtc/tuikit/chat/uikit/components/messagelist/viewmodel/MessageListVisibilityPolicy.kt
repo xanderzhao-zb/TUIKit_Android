@@ -9,6 +9,7 @@ import io.trtc.tuikit.chat.uikit.components.chatbot.ChatbotMessageSource
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
+import io.trtc.tuikit.atomicxcore.api.message.StreamMessagePayload
 
 internal class MessageListVisibilityPolicy(
     private val config: MessageListConfigProtocol,
@@ -27,6 +28,9 @@ internal class MessageListVisibilityPolicy(
         if (ChatbotMessageProtocol.parse(message)?.source == ChatbotMessageSource.INTERRUPT) {
             return false
         }
+        if (isEmptyStreamMessage(message)) {
+            return false
+        }
         if (!config.isShowUnsupportMessage &&
             rendererResolver.isDefaultBuiltInRenderer(message)
         ) {
@@ -42,5 +46,19 @@ internal class MessageListVisibilityPolicy(
             return false
         }
         return true
+    }
+
+    /**
+     * 正文还没到的 TIMStreamElem 流式消息。
+     *
+     * 这条路径不显示三点加载动画，空正文渲染出来就只是一个空气泡，等第一段正文到了
+     * 再让消息出现。顺带也挡掉了那些正文补丁丢失、永远填不上的残骸消息。
+     */
+    private fun isEmptyStreamMessage(message: MessageInfo): Boolean {
+        if (message.messageType != MessageType.STREAM) {
+            return false
+        }
+        val payload = message.messagePayload as? StreamMessagePayload ?: return false
+        return payload.markdown.isEmpty()
     }
 }

@@ -36,4 +36,5 @@
     <string name="demo_chatbot_clear_history_failed">チャット履歴を消去できませんでした</string>
     <string name="demo_confirm">消去</string>
     <string name="demo_cancel">キャンセル</string>
+    <string name="demo_tab_ai">AI</string>
 </resources>

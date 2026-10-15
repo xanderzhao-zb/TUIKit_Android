@@ -3,6 +3,7 @@ package io.trtc.tuikit.chat.demo.main
 import io.trtc.tuikit.chat.demo.common.BadgeDragPolicy
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.AppConstants
+import io.trtc.tuikit.chat.demo.common.CustomerSeatConversations
 import io.trtc.tuikit.chat.demo.customerservice.CustomerServiceManager
 import io.trtc.tuikit.chat.demo.settings.SettingsPageView
 
@@ -49,9 +50,12 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupInfo
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.ai.SupportAgentCatalog
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
 import io.trtc.tuikit.chat.uikit.components.widgets.AvatarBadgeView
+import io.trtc.tuikit.chat.uikit.components.aiassistant.AIAssistantAgentLoader
+import io.trtc.tuikit.chat.uikit.pages.AIAssistantPageView
 import io.trtc.tuikit.chat.uikit.pages.ContactsPageView
 import io.trtc.tuikit.chat.uikit.pages.ConversationsPageView
 import io.trtc.tuikit.chat.uikit.pages.PopupMenuHelper
@@ -97,7 +101,7 @@ class MainActivity : BaseActivity() {
     private var conversationsAddButton: ImageView? = null
     private var contactsAddButton: ImageView? = null
     private var selectedTabIndex = 0
-    private var currentTabId = R.id.demo_tab_messages
+    private var currentTabId = R.id.demo_tab_ai
     private val tabPageCache = mutableMapOf<Int, View>()
     private var isDraggingMessageBadge = false
     private var messageBadgeDragStartRawX = 0f
@@ -129,6 +133,13 @@ class MainActivity : BaseActivity() {
         contactsUnreadBadge = findViewById(R.id.demo_contactsUnreadBadge)
         allBottomTabs = listOf(
             BottomTab(
+                tabId = R.id.demo_tab_ai,
+                root = findViewById(R.id.demo_tab_ai),
+                icon = findViewById(R.id.demo_tab_ai_icon),
+                text = findViewById(R.id.demo_tab_ai_text),
+                iconResId = R.drawable.demo_ic_tab_ai
+            ),
+            BottomTab(
                 tabId = R.id.demo_tab_messages,
                 root = findViewById(R.id.demo_tab_messages),
                 icon = findViewById(R.id.demo_tab_messages_icon),
@@ -158,7 +169,7 @@ class MainActivity : BaseActivity() {
                 iconResId = R.drawable.demo_ic_tab_me
             )
         )
-        val showCallsTab = MMKV.defaultMMKV().decodeBool(AppConstants.KEY_SHOW_CALLS_TAB, true)
+        val showCallsTab = MMKV.defaultMMKV().decodeBool(AppConstants.KEY_SHOW_CALLS_TAB, false)
         bottomTabs = filterVisibleTabs(showCallsTab)
         allBottomTabs.first { it.tabId == R.id.demo_tab_calls }.root.visibility =
             if (showCallsTab) View.VISIBLE else View.GONE
@@ -167,6 +178,11 @@ class MainActivity : BaseActivity() {
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.updatePadding(top = systemBars.top)
             bottomNav.updatePadding(bottom = systemBars.bottom)
+            // 键盘弹起时收起 tab 栏。输入框是 UIKit 自己按 IME 高度顶上去的，而它算高度时
+            // 只扣了导航栏 inset，不知道底下还压着一条 tab 栏——于是输入框与键盘之间会空出
+            // 正好一条 tab 栏的高度。收起它既补掉这段空白，也让聊天区域更高。
+            bottomNavContainer.visibility =
+                if (insets.isVisible(WindowInsetsCompat.Type.ime())) View.GONE else View.VISIBLE
             insets
         }
 
@@ -262,6 +278,7 @@ class MainActivity : BaseActivity() {
     private fun getOrCreatePage(tabId: Int): View {
         return tabPageCache.getOrPut(tabId) {
             when (tabId) {
+                R.id.demo_tab_ai -> createAIPage()
                 R.id.demo_tab_calls -> createCallsPage()
                 R.id.demo_tab_contacts -> createContactsPage()
                 R.id.demo_tab_me -> createMePage()
@@ -307,6 +324,9 @@ class MainActivity : BaseActivity() {
         }
         selectedTabIndex = index
         currentTabId = bottomTabs[index].tabId
+        if (currentTabId == R.id.demo_tab_ai) {
+            (tabPageCache[currentTabId] as? AIAssistantPageView)?.onPageVisible()
+        }
         if (updatePager && viewPager.currentItem != index) {
             viewPager.setCurrentItem(index, false)
         }
@@ -746,6 +766,12 @@ class MainActivity : BaseActivity() {
         return bottomTabs.firstOrNull { it.tabId == tabId }?.icon
     }
 
+    private fun createAIPage(): View {
+        val page = AIAssistantPageView(this)
+        page.setup(AIAssistantAgentLoader(SupportAgentCatalog::fetch))
+        return page
+    }
+
     private fun createConversationsPage(): View {
         val page = ConversationsPageView(this)
         val addButton = ImageView(this).apply {
@@ -781,6 +807,7 @@ class MainActivity : BaseActivity() {
         page.setup(
             headerTitle = getString(R.string.demo_page_conversations_title),
             headerRightAction = addButton,
+            conversationExclusion = CustomerSeatConversations.exclusion,
             onConversationClick = { conversationInfo ->
                 val conversationID = conversationInfo.conversationID
                 if (conversationID == AppConstants.CUSTOMER_SERVICE_CONVERSATION_ID) {

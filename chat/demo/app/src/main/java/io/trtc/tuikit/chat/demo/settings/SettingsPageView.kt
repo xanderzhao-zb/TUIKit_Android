@@ -340,7 +340,7 @@ class SettingsPageView @JvmOverloads constructor(
 
     private fun setupCallsTabToggle() {
         tvCallsTabTitle.text = context.getString(R.string.demo_settings_show_calls)
-        switchCallsTab.setChecked(MMKV.defaultMMKV().decodeBool(AppConstants.KEY_SHOW_CALLS_TAB, true))
+        switchCallsTab.setChecked(MMKV.defaultMMKV().decodeBool(AppConstants.KEY_SHOW_CALLS_TAB, false))
         switchCallsTab.setOnCheckedChangeListener { isChecked ->
             MMKV.defaultMMKV().encode(AppConstants.KEY_SHOW_CALLS_TAB, isChecked)
             (context as? MainActivity)?.setCallsTabVisible(isChecked)
